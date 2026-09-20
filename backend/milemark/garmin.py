@@ -27,7 +27,7 @@ def normalize_run(item):
         date.fromisoformat(started)
     except ValueError:
         return None
-    if not distance or not duration:
+    if not distance or not duration or item.get('activityId') is None:
         return None
     return {
         'id': f"garmin-{item['activityId']}", 'date': started,
@@ -36,7 +36,7 @@ def normalize_run(item):
         'avgHr': number(item.get('averageHR'), 20, 250),
         'elevationM': number(item.get('elevationGain')),
         # Names containing 'race' are not reliable proof of an all-out race.
-        'race': item.get('eventType', {}).get('typeKey') == 'race',
+        'race': (item.get('eventType') or {}).get('typeKey') == 'race',
     }
 
 

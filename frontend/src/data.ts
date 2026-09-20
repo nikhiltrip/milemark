@@ -1,7 +1,7 @@
 import { iso, shift } from './engine';
 import type { Run, Settings, Snapshot } from './types';
 export const today=iso(new Date());
-export const defaultSettings:Settings={raceName:'My marathon',raceDate:shift(today,196),goalMinutes:240,days:4,weeklyKm:25,longestKm:10,recentRaceKm:0,recentRaceMinutes:0};
+export const defaultSettings:Settings={raceName:'San Francisco Marathon',raceDate:today<'2027-07-25'?'2027-07-25':shift(today,196),goalMinutes:240,days:4,weeklyKm:25,longestKm:10,recentRaceKm:0,recentRaceMinutes:0};
 export const demoSettings:Settings={...defaultSettings,raceName:'San Francisco · sample goal',goalMinutes:225,days:5,weeklyKm:42,longestKm:17,recentRaceKm:21.0975,recentRaceMinutes:106};
 export function demoSnapshot():Snapshot {
   const runs:Run[]=[];
@@ -29,6 +29,6 @@ export function normalizeImport(raw:unknown):Snapshot {
     for(const [key,max] of [['sleepHours',24],['sleepScore',100],['hrvMs',500],['hrvBaselineLow',500],['hrvBaselineHigh',500]] as const) if(w[key]!=null&&!num(w[key],0,max)) throw new Error(`Recovery record ${i+1}: invalid ${key}.`);
     return {date:w.date,sleepHours:w.sleepHours??null,sleepScore:w.sleepScore??null,hrvMs:w.hrvMs??null,hrvBaselineLow:w.hrvBaselineLow??null,hrvBaselineHigh:w.hrvBaselineHigh??null};
   });
-  return {runs:[...new Map(runs.map(r=>[r.id,r])).values()],wellness,syncedAt:typeof data.syncedAt==='string'?data.syncedAt:undefined};
+  return {runs:[...new Map(runs.map(r=>[r.id,r])).values()],wellness,syncedAt:typeof data.syncedAt==='string'?data.syncedAt:undefined,warnings:Array.isArray(data.warnings)?data.warnings.filter(x=>typeof x==='string').map(x=>x.slice(0,200)).slice(0,50):[]};
 }
 export function download(name:string,content:string,type='text/plain') {const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}

@@ -42,6 +42,13 @@ export function history(snapshot: Snapshot,today=iso(new Date())) {
     return {start, km:round(runs.reduce((s,r)=>s+r.distanceKm,0)),runs:runs.length};
   });
 }
+export function trainingBase(snapshot:Snapshot,today=iso(new Date())) {
+  const completed=history(snapshot,today).slice(3,7);
+  const average=round(completed.reduce((sum,w)=>sum+w.km,0)/4);
+  const runs=snapshot.runs.filter(r=>r.date>=shift(today,-28)&&r.date<=today);
+  const longest=round(Math.max(0,...runs.map(r=>r.distanceKm)));
+  return {weeklyKm:Math.max(10,Math.min(160,average)),longestKm:Math.max(1,Math.min(longest,Math.max(10,average)))};
+}
 export function generatePlan(s: Settings, today=iso(new Date())): {weeks:Week[];warnings:string[]} {
   const errors=validate(s,today); if(errors.length) throw new Error(errors.join(' '));
   const first=monday(today), raceWeek=monday(s.raceDate);

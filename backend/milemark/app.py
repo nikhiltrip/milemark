@@ -1,6 +1,5 @@
 """Loopback-only backend. Serves the built dashboard and local Garmin endpoints."""
 from pathlib import Path
-from urllib.parse import urlparse
 import json
 import os
 import secrets
@@ -139,6 +138,8 @@ def disconnect():
 
 if (ROOT / 'dist' / 'assets').exists():
     app.mount('/assets', StaticFiles(directory=ROOT / 'dist' / 'assets'), name='assets')
+if (ROOT / 'dist' / 'fonts').exists():
+    app.mount('/fonts', StaticFiles(directory=ROOT / 'dist' / 'fonts'), name='fonts')
 
 
 @app.get('/')
