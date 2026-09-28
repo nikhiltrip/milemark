@@ -2,6 +2,7 @@ import { iso, shift } from "./engine";
 import type { Run, Settings, Snapshot } from "./types";
 export const today = iso(new Date());
 export const defaultSettings: Settings = {
+  startDate: today,
   raceName: "San Francisco Marathon",
   raceDate: today < "2027-07-25" ? "2027-07-25" : shift(today, 196),
   goalMinutes: 240,
@@ -119,6 +120,7 @@ export function normalizeImport(raw: unknown): Snapshot {
       ["sleepHours", 24],
       ["sleepScore", 100],
       ["hrvMs", 500],
+      ["hrv7DayMs", 500],
       ["hrvBaselineLow", 500],
       ["hrvBaselineHigh", 500],
     ] as const)
@@ -129,6 +131,7 @@ export function normalizeImport(raw: unknown): Snapshot {
       sleepHours: w.sleepHours ?? null,
       sleepScore: w.sleepScore ?? null,
       hrvMs: w.hrvMs ?? null,
+      hrv7DayMs: w.hrv7DayMs ?? null,
       hrvBaselineLow: w.hrvBaselineLow ?? null,
       hrvBaselineHigh: w.hrvBaselineHigh ?? null,
     };

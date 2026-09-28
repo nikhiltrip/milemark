@@ -51,6 +51,7 @@ def normalize_wellness(day, sleep, hrv):
         'sleepScore': number((scores.get('overall') or {}).get('value'), 0, 100),
         'sleepHours': round(seconds / 3600, 2) if seconds is not None else None,
         'hrvMs': number(summary.get('lastNightAvg'), 0, 500),
+        'hrv7DayMs': number(summary.get('weeklyAvg'), 0, 500),
         'hrvBaselineLow': number(baseline.get('balancedLow'), 0, 500),
         'hrvBaselineHigh': number(baseline.get('balancedUpper'), 0, 500),
     }

@@ -14,6 +14,17 @@ export function monday(s: string) {
 const round = (n: number) => Math.round(n * 10) / 10;
 export function validate(s: Settings, today = iso(new Date())): string[] {
   const e: string[] = [];
+  if (!s || typeof s !== "object") return ["Invalid goal settings."];
+  if (typeof s.raceName !== "string" || !s.raceName.trim())
+    e.push("Enter a race name.");
+  if (
+    s.startDate &&
+    (!/^\d{4}-\d{2}-\d{2}$/.test(s.startDate) ||
+      !Number.isFinite(day(s.startDate).getTime()) ||
+      iso(day(s.startDate)) !== s.startDate ||
+      s.startDate > today)
+  )
+    e.push("Invalid plan start date.");
   const race = day(s.raceDate);
   if (
     !Number.isFinite(race.getTime()) ||
@@ -55,7 +66,11 @@ export function validate(s: Settings, today = iso(new Date())): string[] {
     e.push("Check your recent race distance and time.");
   return e;
 }
-export function recovery(w: Wellness | undefined, today = iso(new Date())) {
+export function recovery(
+  w: Wellness | undefined,
+  today = iso(new Date()),
+  series: Wellness[] = [],
+) {
   if (!w || w.date < shift(today, -2) || w.date > today)
     return {
       label: "No recent signals",
@@ -70,18 +85,27 @@ export function recovery(w: Wellness | undefined, today = iso(new Date())) {
     reasons.push("Less than 6 hours of sleep");
   if (w.sleepScore != null && w.sleepScore < 60)
     reasons.push("Sleep score below 60");
-  if (w.hrvMs != null && w.hrvBaselineLow != null && w.hrvMs < w.hrvBaselineLow)
-    reasons.push("HRV below your personal baseline");
+  const recent = Array.from(
+    { length: 7 },
+    (_, i) => series.find((x) => x.date === shift(w.date, -i))?.hrvMs,
+  );
+  const rolling =
+    w.hrv7DayMs ??
+    (recent.every((x) => x != null)
+      ? recent.reduce<number>((sum, x) => sum + (x ?? 0), 0) / 7
+      : null);
+  if (rolling != null && w.hrvBaselineLow != null && rolling < w.hrvBaselineLow)
+    reasons.push("7-day HRV below your personal baseline");
   if (
-    w.hrvMs != null &&
+    rolling != null &&
     w.hrvBaselineHigh != null &&
-    w.hrvMs > w.hrvBaselineHigh
+    rolling > w.hrvBaselineHigh
   )
-    reasons.push("HRV above your personal baseline; check how you feel");
+    reasons.push("7-day HRV above your personal baseline; check how you feel");
   const known =
     w.sleepHours != null ||
     w.sleepScore != null ||
-    (w.hrvMs != null && w.hrvBaselineLow != null);
+    (rolling != null && w.hrvBaselineLow != null);
   return {
     label: reasons.length
       ? "Take it easier"
@@ -144,7 +168,7 @@ export function generatePlan(
 ): { weeks: Week[]; warnings: string[] } {
   const errors = validate(s, today);
   if (errors.length) throw new Error(errors.join(" "));
-  const first = monday(today),
+  const first = monday(s.startDate || today),
     raceWeek = monday(s.raceDate);
   const count =
     Math.round(
@@ -191,18 +215,20 @@ export function generatePlan(
     if (build >= 0 && left >= 3 && build > 0) {
       if (!cutback) volume = Math.min(peakCap, volume * 1.045);
     }
-    let total = round(
-      volume *
-        (cutback
-          ? 0.8
+    // Taper always takes precedence over a recovery-week index. The race itself
+    // is excluded from the taper training budget. These fractions are app
+    // parameters, not a reproduction of a trial protocol (see evidence.ts).
+    const taperFactor =
+      left === 0
+        ? 0.4
+        : left === 1
+          ? 0.6
           : left === 2
             ? 0.8
-            : left === 1
-              ? 0.6
-              : left === 0
-                ? 0.25
-                : 1),
-    );
+            : cutback
+              ? 0.8
+              : 1;
+    const total = round(volume * taperFactor);
     if (build >= 0 && left >= 3 && !cutback) long = Math.min(30, long + 1);
     const longKm = round(
       Math.min(
@@ -237,7 +263,17 @@ export function generatePlan(
           km: 0,
           note: "Rest, gentle mobility, or optional easy cross-training.",
         };
-      const isLong = j === 6 && left > 0,
+      const daysToRace = Math.round(
+        (day(s.raceDate).getTime() - day(date).getTime()) / 86400000,
+      );
+      if (daysToRace === 1)
+        return {
+          date,
+          kind: "Rest" as const,
+          km: 0,
+          note: "Rest before your race. Keep the day low-key.",
+        };
+      const isLong = j === 6 && daysToRace >= 14,
         steady = j === 3 && build >= 4 && left >= 3 && s.days >= 4 && !cutback;
       return {
         date,
@@ -246,7 +282,7 @@ export function generatePlan(
           : steady
             ? ("Steady" as const)
             : ("Easy" as const),
-        km: isLong ? longKm : other,
+        km: daysToRace < 7 ? round(total / s.days) : isLong ? longKm : other,
         note: isLong
           ? "Conversational effort. Practice your race-day routine."
           : steady
@@ -262,7 +298,56 @@ export function generatePlan(
       sessions,
     });
   }
+  const maxLong = Math.max(
+    0,
+    ...weeks.flatMap((w) =>
+      w.sessions.filter((x) => x.kind === "Long run").map((x) => x.km),
+    ),
+  );
+  if (maxLong < 25)
+    warnings.push(
+      `The longest scheduled run is ${maxLong.toFixed(1)} km. This limited base may leave you underprepared for a marathon; consider more base-building time and individualized coaching.`,
+    );
   return { weeks, warnings };
+}
+/** Descriptive outcomes, not a causal estimate of this plan's effectiveness. */
+export function progress(snapshot: Snapshot, today = iso(new Date())) {
+  const completed = history(snapshot, today).slice(0, 7);
+  const recent = completed.slice(-4),
+    earlier = completed.slice(0, 3);
+  const avg = (xs: { km: number }[]) =>
+    round(xs.reduce((sum, x) => sum + x.km, 0) / xs.length);
+  const races = snapshot.runs
+    .filter(
+      (r) =>
+        r.race && r.date <= today && r.distanceKm >= 5 && r.durationSec > 0,
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const latest = races[0];
+  const previous = latest
+    ? races
+        .slice(1)
+        .find(
+          (r) =>
+            Math.abs(r.distanceKm - latest.distanceKm) / latest.distanceKm <
+              0.01 && r.date <= shift(latest.date, -14),
+        )
+    : undefined;
+  const change =
+    latest && previous
+      ? (100 *
+          (previous.durationSec / previous.distanceKm -
+            latest.durationSec / latest.distanceKm)) /
+        (previous.durationSec / previous.distanceKm)
+      : null;
+  return {
+    recentAvg: avg(recent),
+    earlierAvg: avg(earlier),
+    recordedWeeks: recent.filter((w) => w.runs > 0).length,
+    latest,
+    previous,
+    paceImprovement: change,
+  };
 }
 export function formatTime(minutes: number) {
   const n = Math.round(minutes);

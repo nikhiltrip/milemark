@@ -7,6 +7,7 @@ import {
   exportCalendar,
   shift,
   validate,
+  progress,
 } from "./engine";
 import { normalizeImport } from "./data";
 import type { Settings } from "./types";
@@ -30,7 +31,7 @@ test("long lead times stay in base instead of compounding mileage", () => {
   assert.ok(nonRace.every((w) => w.km <= 50));
   assert.ok(weeks.some((w) => w.phase === "Recovery week"));
   assert.equal(weeks.at(-1)?.phase, "Race week");
-  for (const w of nonRace)
+  for (const w of nonRace.slice(0, -2))
     assert.equal(w.sessions.filter((s) => s.km > 0).length, 4);
 });
 test("long runs stay capped and taper precedes exact race date", () => {
@@ -86,14 +87,14 @@ test("missing, stale and future recovery never invent readiness", () => {
 });
 test("poor sleep or baseline HRV adds explicit conservative adjustment", () => {
   const r = recovery(
-    { date: today, sleepHours: 5, hrvMs: 38, hrvBaselineLow: 45 },
+    { date: today, sleepHours: 5, hrv7DayMs: 38, hrvBaselineLow: 45 },
     today,
   );
   assert.equal(r.factor, 0.8);
   assert.equal(r.reasons.length, 2);
   assert.equal(recovery({ date: today, hrvMs: 38 }, today).factor, 1);
   assert.equal(
-    recovery({ date: today, hrvMs: 90, hrvBaselineHigh: 60 }, today).factor,
+    recovery({ date: today, hrv7DayMs: 90, hrvBaselineHigh: 60 }, today).factor,
     0.8,
   );
 });
@@ -128,6 +129,13 @@ test("calendar uses real dates and stable unique ids", () => {
     plan.weeks.flatMap((w) => w.sessions).filter((s) => s.km > 0).length,
   );
 });
+test("saved plan keeps its calendar when reopened a week later", () => {
+  const s = { ...base, startDate: today };
+  assert.deepEqual(
+    generatePlan(s, today).weeks,
+    generatePlan(s, shift(today, 7)).weeks,
+  );
+});
 test("imports reject malformed and nonfinite data and deduplicate ids", () => {
   assert.throws(() =>
     normalizeImport({
@@ -149,4 +157,58 @@ test("imports reject malformed and nonfinite data and deduplicate ids", () => {
     durationSec: 1800,
   };
   assert.equal(normalizeImport({ runs: [r, r], wellness: [] }).runs.length, 1);
+});
+
+test("single HRV outlier does not change training; a full trend can", () => {
+  assert.equal(
+    recovery({ date: today, hrvMs: 20, hrvBaselineLow: 45 }, today).factor,
+    1,
+  );
+  const series = Array.from({ length: 7 }, (_, i) => ({
+    date: shift(today, -i),
+    hrvMs: 35,
+    hrvBaselineLow: 45,
+  }));
+  assert.equal(recovery(series[0], today, series).factor, 0.8);
+});
+test("taper stays lighter even when the recovery-week index overlaps race week", () => {
+  const { weeks } = generatePlan(base, today);
+  const peak = Math.max(...weeks.slice(0, -3).map((w) => w.km));
+  const raceWeekTraining = weeks
+    .at(-1)!
+    .sessions.filter((s) => s.kind !== "Race")
+    .reduce((sum, s) => sum + s.km, 0);
+  assert.ok(raceWeekTraining <= peak * 0.41);
+  for (const w of weeks)
+    for (const s of w.sessions)
+      if (s.date >= shift(base.raceDate, -13))
+        assert.notEqual(s.kind, "Long run");
+});
+test("progress comparisons require comparable race efforts and report actual changes", () => {
+  const runs = [
+    {
+      id: "old",
+      date: "2026-09-01",
+      name: "5k race",
+      race: true,
+      distanceKm: 5,
+      durationSec: 1500,
+    },
+    {
+      id: "new",
+      date: "2026-10-01",
+      name: "5k race",
+      race: true,
+      distanceKm: 5,
+      durationSec: 1440,
+    },
+  ];
+  assert.equal(progress({ runs, wellness: [] }, today).paceImprovement, 4);
+  assert.equal(
+    progress(
+      { runs: runs.map((r) => ({ ...r, race: false })), wellness: [] },
+      today,
+    ).paceImprovement,
+    null,
+  );
 });

@@ -21,12 +21,14 @@ import {
   Link,
   Moon,
   ExternalLink,
-  Mountain,
+  TrendingUp,
   CircleHelp,
   Menu,
 } from "lucide-react";
 import {
   day,
+  monday,
+  progress,
   shift,
   generatePlan,
   history,
@@ -51,6 +53,7 @@ import {
 import type { Snapshot, Settings, Run, Wellness } from "./types";
 import "./styles.css";
 import { upcomingRaces } from "./races";
+import { evidence } from "./evidence";
 
 const EMPTY: Snapshot = { runs: [], wellness: [] };
 const dateLabel = (
@@ -68,7 +71,12 @@ function App() {
   });
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = readStored("milemark-settings-v1", defaultSettings);
-    return validate(saved).length ? defaultSettings : saved;
+    try {
+      generatePlan(saved);
+      return saved;
+    } catch {
+      return defaultSettings;
+    }
   });
   const [view, setView] = useState("Overview");
   const [modal, setModal] = useState<string | null>(null);
@@ -83,16 +91,27 @@ function App() {
   const [chartRange, setChartRange] = useState(8);
   const [selectedDay, setSelectedDay] = useState(today);
   const [mobile, setMobile] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const snapshot = mode === "demo" ? demoSnapshot() : personal;
   const config = mode === "demo" ? demoSettings : settings;
   const plan = generatePlan(config);
+  const currentWeek = (s: Settings) =>
+    Math.max(
+      0,
+      Math.floor(
+        (day(monday(today)).getTime() -
+          day(monday(s.startDate || today)).getTime()) /
+          604800000,
+      ),
+    );
   const week = plan.weeks[Math.min(weekIndex, plan.weeks.length - 1)];
   const wellness = [...snapshot.wellness].sort((a, b) =>
     b.date.localeCompare(a.date),
   );
-  const signals = recovery(wellness[0]);
+  const signals = recovery(wellness[0], today, wellness);
+  const outcomes = progress(snapshot);
   const pred = prediction(config, snapshot);
   const hist = history(snapshot);
   const currentRuns = snapshot.runs.filter(
@@ -149,6 +168,7 @@ function App() {
       opener.current?.focus();
     }
     setError("");
+    setConfirmClear(false);
   }, [modal]);
   useEffect(() => {
     if (!notice) return;
@@ -188,7 +208,7 @@ function App() {
   }
   function personalMode() {
     setMode("personal");
-    setWeekIndex(0);
+    setWeekIndex(currentWeek(settings));
     setSelectedDay(today);
     if (!personal.runs.length) setModal("setup");
   }
@@ -196,7 +216,7 @@ function App() {
     setView(v);
     setMobile(false);
     if (v === "Overview") {
-      setWeekIndex(0);
+      setWeekIndex(currentWeek(config));
       setSelectedDay(today);
     }
   }
@@ -204,6 +224,7 @@ function App() {
     event.preventDefault();
     const f = new FormData(event.currentTarget);
     const value: Settings = {
+      startDate: today,
       raceName: String(f.get("raceName")).trim() || "My marathon",
       raceDate: String(f.get("raceDate")),
       goalMinutes: Number(f.get("hours")) * 60 + Number(f.get("minutes")),
@@ -420,6 +441,7 @@ function App() {
             [CalendarDays, "Training plan"],
             [Footprints, "Run journal"],
             [Heart, "Recovery"],
+            [TrendingUp, "Progress & science"],
           ].map(([Icon, label]) => (
             <button
               key={String(label)}
@@ -534,7 +556,9 @@ function App() {
                     ? "A little more, over time."
                     : view === "Run journal"
                       ? "Every mile counts."
-                      : "Listen. Then run."}
+                      : view === "Recovery"
+                        ? "Listen. Then run."
+                        : "Show the work."}
               </h1>
               <p>
                 {view === "Overview"
@@ -543,7 +567,9 @@ function App() {
                     ? "Build the base. Make room for recovery. Arrive ready."
                     : view === "Run journal"
                       ? "The early starts, the easy days, the miles you showed up for."
-                      : "Sleep, HRV, and how you feel — with room for the whole picture."}
+                      : view === "Recovery"
+                        ? "Sleep, HRV, and how you feel — with room for the whole picture."
+                        : "Track what changes. Understand what the research actually supports."}
               </p>
             </div>
             <button
@@ -1099,9 +1125,10 @@ function App() {
                 <h2>A signal, not a verdict.</h2>
                 <p>
                   Milemark flags sleep under 6 hours, sleep scores under 60, or
-                  HRV outside your own baseline. These are simple app rules, not
-                  Garmin’s Training Readiness score. Missing values stay
-                  missing. Data older than two days doesn’t change your run.
+                  HRV outside your own baseline. Single-night HRV is not used on
+                  its own. These are simple app rules, not Garmin’s Training
+                  Readiness score. Missing values stay missing. Data older than
+                  two days doesn’t change your run.
                 </p>
                 <p>
                   HRV is personal. Garmin needs around three weeks of overnight
@@ -1117,6 +1144,101 @@ function App() {
                   Read Garmin’s HRV guide <ExternalLink size={14} />
                 </a>
               </section>
+            </>
+          )}
+          {view === "Progress & science" && (
+            <>
+              <section className="plan-summary">
+                <div>
+                  <span className="eyebrow">MEASURE, DON’T PROMISE</span>
+                  <h2>Evidence-informed. Personally measured.</h2>
+                  <p>
+                    This app has not been tested in a performance trial. No
+                    finish time or fitness gain is guaranteed.
+                  </p>
+                </div>
+                <TrendingUp size={36} strokeWidth={1.2} />
+              </section>
+              <div className="recovery-grid">
+                <section className="panel">
+                  <span className="eyebrow">LAST FOUR COMPLETE WEEKS</span>
+                  <div className="large-number">
+                    {outcomes.recentAvg}
+                    <span> km / week recorded</span>
+                  </div>
+                  <p>
+                    Earlier three-week average: {outcomes.earlierAvg} km/week.
+                  </p>
+                  <p>
+                    {outcomes.recordedWeeks} of 4 weeks contain logged runs.
+                    Missing logs can look like zero training.
+                  </p>
+                </section>
+                <section className="panel">
+                  <span className="eyebrow">COMPARABLE RACE EFFORTS</span>
+                  <div className="large-number">
+                    {outcomes.paceImprovement != null
+                      ? `${Math.abs(outcomes.paceImprovement).toFixed(1)}%`
+                      : "—"}
+                    <span>
+                      {outcomes.paceImprovement != null
+                        ? outcomes.paceImprovement >= 0
+                          ? "faster race pace"
+                          : "slower race pace"
+                        : "more data needed"}
+                    </span>
+                  </div>
+                  {outcomes.previous && outcomes.latest ? (
+                    <p>
+                      {dateLabel(outcomes.previous.date)}:{" "}
+                      {pace(
+                        outcomes.previous.durationSec /
+                          outcomes.previous.distanceKm,
+                      )}{" "}
+                      /km → {dateLabel(outcomes.latest.date)}:{" "}
+                      {pace(
+                        outcomes.latest.durationSec /
+                          outcomes.latest.distanceKm,
+                      )}{" "}
+                      /km. Courses and conditions can differ.
+                    </p>
+                  ) : (
+                    <p>
+                      Log two actual race efforts at nearly the same distance,
+                      at least 14 days apart. Easy runs do not count as
+                      performance tests.
+                    </p>
+                  )}
+                  <p>
+                    A change is an observation, not proof that this plan caused
+                    it.
+                  </p>
+                </section>
+              </div>
+              <section className="panel explanation">
+                <h2>Why this plan looks the way it does.</h2>
+                <p>
+                  The research supports some training principles more directly
+                  than others. Each source below explains the population studied
+                  and where the app makes its own choices. Automated tests
+                  verify software behavior; they do not establish physiological
+                  effectiveness.
+                </p>
+              </section>
+              <div className="science-grid">
+                {evidence.map((item) => (
+                  <article className="panel evidence-card" key={item.title}>
+                    <span className="eyebrow">{item.type}</span>
+                    <h2>{item.title}</h2>
+                    <p>{item.finding}</p>
+                    <h3>In Milemark</h3>
+                    <p>{item.application}</p>
+                    <a href={item.url} target="_blank" rel="noreferrer">
+                      Read the study <ExternalLink size={14} />
+                    </a>
+                  </article>
+                ))}
+              </div>
             </>
           )}
           <footer>
@@ -1573,6 +1695,27 @@ function App() {
                 Export files contain run and recovery information. Share only
                 what you intend others to see.
               </p>
+              {mode === "personal" && (
+                <button
+                  className="btn full"
+                  onClick={() => {
+                    if (!confirmClear) {
+                      setConfirmClear(true);
+                      return;
+                    }
+                    setPersonal(EMPTY);
+                    setConfirmClear(false);
+                    setNotice(
+                      "Browser journal cleared. Garmin tokens and the local server cache are unchanged.",
+                    );
+                    setModal(null);
+                  }}
+                >
+                  {confirmClear
+                    ? "Confirm: clear browser runs & check-ins"
+                    : "Clear browser journal"}
+                </button>
+              )}
             </>
           )}
           {modal === "about" && (
@@ -1583,6 +1726,15 @@ function App() {
                 Milemark brings marathon planning, run history, and recovery
                 signals into one personal journal.
               </p>
+              <button
+                className="btn full"
+                onClick={() => {
+                  setModal(null);
+                  go("Progress & science");
+                }}
+              >
+                Read the research & track progress <ArrowUpRight size={16} />
+              </button>
               <h3>The training template</h3>
               <p>
                 Current weekly volume anchors a gradual build, with a reduced

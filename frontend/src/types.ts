@@ -13,6 +13,7 @@ export interface Wellness {
   sleepScore?: number | null;
   sleepHours?: number | null;
   hrvMs?: number | null;
+  hrv7DayMs?: number | null;
   hrvBaselineLow?: number | null;
   hrvBaselineHigh?: number | null;
 }
@@ -23,6 +24,7 @@ export interface Snapshot {
   warnings?: string[];
 }
 export interface Settings {
+  startDate?: string;
   raceName: string;
   raceDate: string;
   goalMinutes: number;
