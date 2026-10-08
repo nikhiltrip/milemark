@@ -21,9 +21,11 @@ The hosted static version supports the demo and manual mode. It does not reach t
 
 Sync imports up to one year / 1,000 most recent activities and 14 days of sleep/HRV. Activity retrieval failure preserves the previous SQLite snapshot. A missing health endpoint produces a warning and null metrics rather than a fabricated score. Race flags come from structured event metadata, not a name heuristic. Summaries omit location and raw account payloads.
 
-The single-user service serializes Garmin operations, limits login retries, rejects remote clients/foreign origins, and requires a browser-request token on mutations. Tokens and the database are ignored by Git. External Garmin auth still needs owner verification.
+The single-user service serializes Garmin operations, limits login retries, rejects remote clients/foreign origins, and requires a browser-request token on mutations. Tokens and the database are ignored by Git. Live Garmin sign-in and sync have been verified with the owner’s account.
 
 ## TypeScript domain logic
+
+Unit conversion happens at display/input/export boundaries. Stored distances stay in kilometers, and pace converts by the same exact 1.609344 factor.
 
 The engine handles local-calendar dates at noon to avoid UTC date shifts. Plans use a stable Monday-based calendar with an exact race-day event and no postrace running. Test cases cover Sunday and midweek races.
 
@@ -38,4 +40,4 @@ The browser maintains a labeled sample mode separately from the personal journal
 - Plans are configurable heuristics. Injury history, terrain, heat, nutrition, and coach judgment are not modeled.
 - Hosted manual storage belongs to that browser/origin; it does not synchronize across devices.
 - Event presets are a curated list verified October 15, 2026, not a live race-directory feed. Organizer links remain visible and expired dates are filtered.
-- No live account test can be completed without the owner signing in.
+- Each new account still requires its owner to sign in locally.

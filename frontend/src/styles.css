@@ -1990,8 +1990,46 @@ dialog::backdrop {
   margin-top: 20px;
   color: #d4450b;
 }
-@media(max-width:760px){.sidebar{visibility:hidden}.sidebar.open{visibility:visible}}
-@media(max-width:480px){.hero-inner{grid-template-columns:1fr 100px;gap:8px}.hero h2{font-size:34px}.track-art svg{max-height:180px}.hero-inner p{font-size:9px}}
+.units button {
+  min-width: 28px;
+}
+.units button.selected {
+  color: #d4450b;
+}
+@media (max-width: 480px) {
+  .header-left > span {
+    display: none;
+  }
+  .header-actions {
+    gap: 10px;
+  }
+  .units button {
+    padding: 6px 7px;
+  }
+}
+@media (max-width: 760px) {
+  .sidebar {
+    visibility: hidden;
+  }
+  .sidebar.open {
+    visibility: visible;
+  }
+}
+@media (max-width: 480px) {
+  .hero-inner {
+    grid-template-columns: 1fr 100px;
+    gap: 8px;
+  }
+  .hero h2 {
+    font-size: 34px;
+  }
+  .track-art svg {
+    max-height: 180px;
+  }
+  .hero-inner p {
+    font-size: 9px;
+  }
+}
 @media (max-width: 760px) {
   .science-grid {
     grid-template-columns: 1fr;

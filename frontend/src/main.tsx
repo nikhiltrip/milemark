@@ -54,6 +54,13 @@ import type { Snapshot, Settings, Run, Wellness } from "./types";
 import "./styles.css";
 import { upcomingRaces } from "./races";
 import { evidence } from "./evidence";
+import {
+  displayDistance,
+  toKilometers,
+  secondsPerUnit,
+  distanceMessage,
+  type Unit,
+} from "./units";
 
 const EMPTY: Snapshot = { runs: [], wellness: [] };
 const dateLabel = (
@@ -61,6 +68,15 @@ const dateLabel = (
   opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" },
 ) => day(date).toLocaleDateString("en-US", opts);
 function App() {
+  const [unit, setUnit] = useState<Unit>(() =>
+    readStored<Unit>("milemark-unit-v1", "mi") === "km" ? "km" : "mi",
+  );
+  const d = (km: number) => displayDistance(km, unit);
+  const km = (value: number) => toKilometers(value, unit);
+  const p = (sec: number) => pace(secondsPerUnit(sec, unit));
+  useEffect(() => {
+    saveStored("milemark-unit-v1", unit);
+  }, [unit]);
   const [mode, setMode] = useState<"demo" | "personal">("demo");
   const [personal, setPersonal] = useState<Snapshot>(() => {
     try {
@@ -139,6 +155,7 @@ function App() {
   );
 
   useEffect(() => {
+    if (!["localhost", "127.0.0.1"].includes(location.hostname)) return;
     fetch("/api/session")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -146,6 +163,36 @@ function App() {
           setLocal(true);
           setToken(data.token);
           setConnected(data.connected);
+          if (data.connected)
+            fetch("/api/snapshot")
+              .then((r) => (r.ok ? r.json() : null))
+              .then((raw) => {
+                if (!raw?.syncedAt) return;
+                const imported = normalizeImport(raw);
+                setPersonal((previous) => ({
+                  ...imported,
+                  runs: [
+                    ...new Map(
+                      [
+                        ...imported.runs,
+                        ...previous.runs.filter(
+                          (r) => !r.id.startsWith("garmin-"),
+                        ),
+                      ].map((r) => [r.id, r]),
+                    ).values(),
+                  ],
+                  wellness: [
+                    ...new Map(
+                      [...imported.wellness, ...previous.wellness].map((w) => [
+                        w.date,
+                        w,
+                      ]),
+                    ).values(),
+                  ],
+                }));
+                setMode("personal");
+              })
+              .catch(() => {});
         }
       })
       .catch(() => {});
@@ -229,9 +276,9 @@ function App() {
       raceDate: String(f.get("raceDate")),
       goalMinutes: Number(f.get("hours")) * 60 + Number(f.get("minutes")),
       days: Number(f.get("days")),
-      weeklyKm: Number(f.get("weeklyKm")),
-      longestKm: Number(f.get("longestKm")),
-      recentRaceKm: Number(f.get("recentRaceKm")),
+      weeklyKm: km(Number(f.get("weeklyKm"))),
+      longestKm: km(Number(f.get("longestKm"))),
+      recentRaceKm: km(Number(f.get("recentRaceKm"))),
       recentRaceMinutes: Number(f.get("recentRaceMinutes")),
     };
     const errors = validate(value);
@@ -258,7 +305,7 @@ function App() {
       id: crypto.randomUUID(),
       date: String(f.get("date")),
       name: String(f.get("name")).trim() || "My run",
-      distanceKm: Number(f.get("distance")),
+      distanceKm: km(Number(f.get("distance"))),
       durationSec: Number(f.get("duration")) * 60,
       avgHr: f.get("heart") ? Number(f.get("heart")) : null,
       race: f.get("race") === "on",
@@ -368,7 +415,7 @@ function App() {
           <div className="table-label">
             <span>ACTIVITY</span>
             <span>DISTANCE</span>
-            <span>PACE /KM</span>
+            <span>PACE /{unit.toUpperCase()}</span>
             <span>TIME</span>
           </div>
           {recentRuns.slice(0, limit).map((r) => (
@@ -393,9 +440,9 @@ function App() {
                 </div>
               </div>
               <b>
-                {r.distanceKm.toFixed(1)} <small>km</small>
+                {d(r.distanceKm).toFixed(1)} <small>{unit}</small>
               </b>
-              <b>{pace(r.durationSec / r.distanceKm)}</b>
+              <b>{p(r.durationSec / r.distanceKm)}</b>
               <b>
                 {Math.floor(r.durationSec / 60)}
                 <small>m</small>
@@ -515,6 +562,22 @@ function App() {
             </span>
           </div>
           <div className="header-actions">
+            <div
+              className="segmented units"
+              role="group"
+              aria-label="Distance units"
+            >
+              {(["mi", "km"] as const).map((u) => (
+                <button
+                  key={u}
+                  aria-pressed={unit === u}
+                  className={unit === u ? "selected" : ""}
+                  onClick={() => setUnit(u)}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
             <span className="date-today">
               {dateLabel(today, {
                 weekday: "short",
@@ -605,7 +668,7 @@ function App() {
           )}
           {error && !modal && (
             <p className="error" role="alert">
-              {error}
+              {distanceMessage(error, unit)}
             </p>
           )}
 
@@ -615,7 +678,10 @@ function App() {
                 <section className="hero">
                   <div className="hero-top">
                     <span className="eyebrow">YOUR NEXT CHAPTER</span>
-                    <span className="outline-pill">42.195 KM</span>
+                    <span className="outline-pill">
+                      {d(42.195).toFixed(unit === "mi" ? 1 : 3)}{" "}
+                      {unit.toUpperCase()}
+                    </span>
                   </div>
                   <div className="hero-inner">
                     <div>
@@ -700,17 +766,19 @@ function App() {
                   </p>
                   <div className="workout-stats">
                     <div>
-                      <b>{todayKm ? todayKm.toFixed(1) : "—"}</b>
-                      <span>kilometers</span>
+                      <b>{todayKm ? d(todayKm).toFixed(1) : "—"}</b>
+                      <span>{unit === "mi" ? "miles" : "kilometers"}</span>
                     </div>
                     <div>
                       <b>
                         {session.kind === "Race"
-                          ? pace((config.goalMinutes * 60) / 42.195)
+                          ? p((config.goalMinutes * 60) / 42.195)
                           : "Easy"}
                       </b>
                       <span>
-                        {session.kind === "Race" ? "goal pace /km" : "by feel"}
+                        {session.kind === "Race"
+                          ? `goal pace /${unit}`
+                          : "by feel"}
                       </span>
                     </div>
                   </div>
@@ -728,11 +796,12 @@ function App() {
                     THIS WEEK <Activity size={15} />
                   </span>
                   <div className="metric-value">
-                    {distance.toFixed(1)}
-                    <span>km</span>
+                    {d(distance).toFixed(1)}
+                    <span>{unit}</span>
                   </div>
                   <small>
-                    {currentRuns.length} runs logged · {week.km.toFixed(1)} km
+                    {currentRuns.length} runs logged · {d(week.km).toFixed(1)}{" "}
+                    {unit}
                     planned
                   </small>
                 </article>
@@ -741,8 +810,8 @@ function App() {
                     LAST WEEK <Footprints size={15} />
                   </span>
                   <div className="metric-value">
-                    {lastWeek.toFixed(1)}
-                    <span>km</span>
+                    {d(lastWeek).toFixed(1)}
+                    <span>{unit}</span>
                   </div>
                   <small>From your recorded activities</small>
                 </article>
@@ -802,12 +871,19 @@ function App() {
                       ))}
                     </div>
                   </div>
-                  <MileageChart values={hist.slice(-chartRange)} />
+                  <MileageChart
+                    unit={unit}
+                    values={hist
+                      .slice(-chartRange)
+                      .map((x) => ({ ...x, km: d(x.km) }))}
+                  />
                   <div className="chart-footer">
                     <span>
                       <i /> Weekly distance
                     </span>
-                    <span>Recorded runs · kilometers</span>
+                    <span>
+                      Recorded runs · {unit === "mi" ? "miles" : "kilometers"}
+                    </span>
                   </div>
                 </section>
                 <section className="panel recovery-preview">
@@ -886,8 +962,9 @@ function App() {
                   </span>
                   <h2>{plan.weeks.length} weeks. One finish line.</h2>
                   <p>
-                    {config.days} running days · starting at {config.weeklyKm}{" "}
-                    km/week · {formatTime(config.goalMinutes)} goal
+                    {config.days} running days · starting at{" "}
+                    {d(config.weeklyKm).toFixed(1)} {unit}/week ·{" "}
+                    {formatTime(config.goalMinutes)} goal
                   </p>
                 </div>
                 <div className="actions">
@@ -900,7 +977,7 @@ function App() {
                     onClick={() =>
                       download(
                         "milemark-training.ics",
-                        exportCalendar(plan.weeks),
+                        exportCalendar(plan.weeks, unit),
                         "text/calendar",
                       )
                     }
@@ -911,7 +988,7 @@ function App() {
               </section>
               {plan.warnings.map((w) => (
                 <p className="callout" key={w}>
-                  {w}
+                  {distanceMessage(w, unit)}
                 </p>
               ))}
               <section className="panel">
@@ -964,7 +1041,11 @@ function App() {
                         <Footprints size={22} />
                       )}
                       <strong>{s.kind}</strong>
-                      <em>{s.km ? s.km.toFixed(1) + " km" : "Rest & reset"}</em>
+                      <em>
+                        {s.km
+                          ? d(s.km).toFixed(1) + " " + unit
+                          : "Rest & reset"}
+                      </em>
                     </button>
                   ))}
                 </div>
@@ -979,7 +1060,7 @@ function App() {
                     </span>
                     <h3>
                       {adjust ? "Lighter option" : session.kind}
-                      {todayKm > 0 ? ` · ${todayKm.toFixed(1)} km` : ""}
+                      {todayKm > 0 ? ` · ${d(todayKm).toFixed(1)} ${unit}` : ""}
                     </h3>
                     <p>
                       {adjust
@@ -988,7 +1069,9 @@ function App() {
                         : session.note}
                     </p>
                   </div>
-                  <span>{week.km.toFixed(1)} km scheduled this week</span>
+                  <span>
+                    {d(week.km).toFixed(1)} {unit} scheduled this week
+                  </span>
                 </div>
               </section>
               <section className="panel plan-blocks">
@@ -1021,7 +1104,7 @@ function App() {
                           ),
                         }}
                       />
-                      <b>{Math.round(w.km)}</b>
+                      <b>{Math.round(d(w.km))}</b>
                       <small>{w.phase}</small>
                     </button>
                   ))}
@@ -1041,8 +1124,10 @@ function App() {
               <section className="journal-toolbar">
                 <span>
                   {recentRuns.length} activities ·{" "}
-                  {recentRuns.reduce((s, r) => s + r.distanceKm, 0).toFixed(1)}{" "}
-                  km recorded
+                  {recentRuns
+                    .reduce((s, r) => s + d(r.distanceKm), 0)
+                    .toFixed(1)}{" "}
+                  {unit} recorded
                 </span>
                 <div className="actions">
                   <button className="btn" onClick={() => setModal("data")}>
@@ -1163,11 +1248,12 @@ function App() {
                 <section className="panel">
                   <span className="eyebrow">LAST FOUR COMPLETE WEEKS</span>
                   <div className="large-number">
-                    {outcomes.recentAvg}
-                    <span> km / week recorded</span>
+                    {d(outcomes.recentAvg).toFixed(1)}
+                    <span> {unit} / week recorded</span>
                   </div>
                   <p>
-                    Earlier three-week average: {outcomes.earlierAvg} km/week.
+                    Earlier three-week average:{" "}
+                    {d(outcomes.earlierAvg).toFixed(1)} {unit}/week.
                   </p>
                   <p>
                     {outcomes.recordedWeeks} of 4 weeks contain logged runs.
@@ -1191,16 +1277,16 @@ function App() {
                   {outcomes.previous && outcomes.latest ? (
                     <p>
                       {dateLabel(outcomes.previous.date)}:{" "}
-                      {pace(
+                      {p(
                         outcomes.previous.durationSec /
                           outcomes.previous.distanceKm,
                       )}{" "}
-                      /km → {dateLabel(outcomes.latest.date)}:{" "}
-                      {pace(
+                      /{unit} → {dateLabel(outcomes.latest.date)}:{" "}
+                      {p(
                         outcomes.latest.durationSec /
                           outcomes.latest.distanceKm,
                       )}{" "}
-                      /km. Courses and conditions can differ.
+                      /{unit}. Courses and conditions can differ.
                     </p>
                   ) : (
                     <p>
@@ -1286,10 +1372,10 @@ function App() {
                       const base = trainingBase(personal);
                       (
                         form.elements.namedItem("weeklyKm") as HTMLInputElement
-                      ).value = String(base.weeklyKm);
+                      ).value = d(base.weeklyKm).toFixed(1);
                       (
                         form.elements.namedItem("longestKm") as HTMLInputElement
-                      ).value = String(base.longestKm);
+                      ).value = d(base.longestKm).toFixed(1);
                     }}
                   >
                     Use my last 4 complete weeks <Activity size={16} />
@@ -1330,26 +1416,26 @@ function App() {
                 </div>
                 <div className="form-row">
                   <label>
-                    Current km / week
+                    Current {unit} / week
                     <input
                       name="weeklyKm"
                       type="number"
-                      min={10}
-                      max={160}
-                      step="0.1"
-                      defaultValue={settings.weeklyKm}
+                      min={d(10)}
+                      max={d(160)}
+                      step="any"
+                      defaultValue={Number(d(settings.weeklyKm).toFixed(2))}
                       required
                     />
                   </label>
                   <label>
-                    Longest recent run (km)
+                    Longest recent run ({unit})
                     <input
                       name="longestKm"
                       type="number"
-                      min={1}
-                      max={160}
-                      step="0.1"
-                      defaultValue={settings.longestKm}
+                      min={d(1)}
+                      max={d(160)}
+                      step="any"
+                      defaultValue={Number(d(settings.longestKm).toFixed(2))}
                       required
                     />
                   </label>
@@ -1360,14 +1446,16 @@ function App() {
                   </summary>
                   <div className="form-row">
                     <label>
-                      Race distance (km)
+                      Race distance ({unit})
                       <input
                         name="recentRaceKm"
                         type="number"
                         min={0}
-                        max={50}
+                        max={d(50)}
                         step="any"
-                        defaultValue={settings.recentRaceKm}
+                        defaultValue={Number(
+                          d(settings.recentRaceKm).toFixed(2),
+                        )}
                       />
                     </label>
                     <label>
@@ -1419,12 +1507,12 @@ function App() {
                 </label>
                 <div className="form-row">
                   <label>
-                    Distance (km)
+                    Distance ({unit})
                     <input
                       name="distance"
                       type="number"
                       min="0.01"
-                      max="300"
+                      max={d(300)}
                       step="0.01"
                       required
                     />
@@ -1739,9 +1827,9 @@ function App() {
               <p>
                 Current weekly volume anchors a gradual build, with a reduced
                 week every fourth build week and a three-week taper. Long runs
-                are capped at 30 km and 40% of weekly volume. Time beyond a
-                20-week build stays in a base phase. These are app design
-                choices, not a validated training prescription.
+                are capped at {d(30).toFixed(1)} {unit} and 40% of weekly
+                volume. Time beyond a 20-week build stays in a base phase. These
+                are app design choices, not a validated training prescription.
               </p>
               <h3>Estimates & recovery</h3>
               <p>
@@ -1784,7 +1872,7 @@ function App() {
           )}
           {error && (
             <p className="error" role="alert">
-              {error}
+              {distanceMessage(error, unit)}
             </p>
           )}
         </div>
@@ -1876,7 +1964,13 @@ function RacePicker({ settings }: { settings: Settings }) {
     </div>
   );
 }
-function MileageChart({ values }: { values: { start: string; km: number }[] }) {
+function MileageChart({
+  values,
+  unit,
+}: {
+  unit: Unit;
+  values: { start: string; km: number }[];
+}) {
   const max = Math.max(20, ...values.map((x) => x.km)) * 1.2;
   const width = 640,
     height = 175;
@@ -1893,7 +1987,7 @@ function MileageChart({ values }: { values: { start: string; km: number }[] }) {
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={values
-            .map((x) => `${dateLabel(x.start)}: ${x.km} kilometers`)
+            .map((x) => `${dateLabel(x.start)}: ${x.km.toFixed(1)} ${unit}`)
             .join(", ")}
         >
           {[0, 0.5, 1].map((n) => (
@@ -1918,7 +2012,7 @@ function MileageChart({ values }: { values: { start: string; km: number }[] }) {
                 fill={i === values.length - 1 ? "#ffbd9c" : "#fc4c02"}
               >
                 <title>
-                  {dateLabel(x.start)} · {x.km} km
+                  {dateLabel(x.start)} · {x.km.toFixed(1)} {unit}
                 </title>
               </rect>
             </g>

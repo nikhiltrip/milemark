@@ -11,10 +11,11 @@
 - Weekly distance charts, run history, manual logging, recovery check-ins, and race-based marathon estimates.
 - A Progress & science page with source links, clear evidence limits, and comparisons of actual comparable race efforts.
 - Local Garmin sign-in and MFA, cached session tokens, and read-only imports of runs, sleep, and HRV. Uses the **unofficial** `garminconnect` Python client, not Garmin's enterprise API.
+- Miles by default, with a persistent miles/kilometers switch for distances, pace, goal inputs, and calendar exports. Stored/imported distances remain canonical kilometers.
 - Browser-local manual mode for runners without Garmin. JSON import/export and `.ics` calendar downloads.
 - Clearly labeled synthetic demo data. Personal data is never mixed with the sample runner.
 
-**Live Garmin account verification is pending the owner's sign-in.** The adapter is implemented against installed `garminconnect` 0.3.18 and its login/MFA/data contracts are tested with fixtures. These checks do not prove an individual Garmin account can authenticate. Garmin can change or restrict its services, and recovery metrics depend on the device.
+**Live Garmin sign-in and read-only import were verified with the owner’s account on October 15, 2026.** The adapter uses installed `garminconnect` 0.3.18; login/MFA/data contracts also have fixture tests. Individual account behavior can differ. Garmin can change or restrict its services, and recovery metrics depend on the device.
 
 ## Run locally
 

@@ -1,4 +1,5 @@
 import type { Settings, Snapshot, Week, Wellness } from "./types";
+import { displayDistance, type Unit } from "./units";
 export const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const day = (s: string) => new Date(`${s}T12:00:00`);
@@ -357,7 +358,7 @@ export function pace(secPerKm: number) {
   const n = Math.round(secPerKm);
   return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
 }
-export function exportCalendar(weeks: Week[]) {
+export function exportCalendar(weeks: Week[], unit: Unit = "km") {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -383,7 +384,7 @@ export function exportCalendar(weeks: Week[]) {
           `DTSTAMP:${stamp}`,
           `DTSTART;VALUE=DATE:${s.date.replace(/-/g, "")}`,
           `DTEND;VALUE=DATE:${shift(s.date, 1).replace(/-/g, "")}`,
-          `SUMMARY:${escape(`${s.kind} · ${round(s.km)} km`)}`,
+          `SUMMARY:${escape(`${s.kind} · ${round(displayDistance(s.km, unit))} ${unit}`)}`,
           `DESCRIPTION:${escape(s.note)}`,
           "END:VEVENT",
         );
