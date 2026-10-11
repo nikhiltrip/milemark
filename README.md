@@ -9,6 +9,7 @@
 - Marathon selection: upcoming Los Angeles, Tokyo, Boston, and San Francisco events, plus a custom name and date. Preset dates link to organizer sources; past events are automatically hidden.
 - A training template based on your current mileage, longest run, running days, and race date. Includes base weeks, gradual progression, recovery weeks, and a taper.
 - Weekly distance charts, run history, manual logging, recovery check-ins, and race-based marathon estimates.
+- VO₂ max, cadence, resting/max heart rate, running power, training effect, ground-contact time, and Garmin race predictions where the device provides them.
 - A Progress & science page with source links, clear evidence limits, and comparisons of actual comparable race efforts.
 - Local Garmin sign-in and MFA, cached session tokens, and read-only imports of runs, sleep, and HRV. Uses the **unofficial** `garminconnect` Python client, not Garmin's enterprise API.
 - Miles by default, with a persistent miles/kilometers switch for distances, pace, goal inputs, and calendar exports. Stored/imported distances remain canonical kilometers.
@@ -54,9 +55,9 @@ The plan keeps its original start date across reloads. Editing a goal starts a n
 
 The engine is deterministic and inspectable in `frontend/src/engine.ts`. It is **not a trained ML model** or a medical assessment.
 
-- More than 20 weeks to race: hold the entered training base before a 20-week build.
-- Build weeks: 4.5% increases between ordinary build weeks, a reduced week every fourth build week, and a cap of 165% of starting volume (up to 80 km for lower-volume runners). These are implementation choices, not proven injury-prevention thresholds.
-- Long runs: no more than 30 km or 40% of weekly volume. Schedules preserve at least one nonrunning day. Short timelines generate explicit warnings.
+- Earlier months progressively build the base toward an explicit peak-mileage target instead of freezing the starting volume. The default four-day target is 35 miles/week; goal settings let the runner edit it.
+- Progression is calculated from starting volume, target peak, and available growth weeks, capped at 6% between ordinary build weeks. Every fourth week is reduced. If the target is unreachable within the timeline, the app shows the attainable peak and warns rather than forcing the mileage. These are app parameters, not proven injury-prevention thresholds.
+- Long runs: no more than 18 miles or 45–50% of weekly volume, depending on running frequency. Schedules preserve at least one nonrunning day. Short timelines generate explicit warnings.
 - Recovery: sleep below 6 hours, a sleep score below 60, or seven-day HRV outside the personal baseline suggests an easy session 20% shorter **today only**. Missing or stale data makes no readiness claim. Calendar exports contain the base schedule.
 - Finish estimate: the Riegel formula with exponent 1.06, using an explicitly marked race or user-entered race time. Easy training runs are never treated as race efforts. Course, weather, durability, and training history can make actual results differ substantially.
 - Goal pace is a target, not proof of current ability. Most sessions use conversational effort rather than an unsupported pace prescription.

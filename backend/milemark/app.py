@@ -6,6 +6,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -63,6 +64,10 @@ class MFA(BaseModel):
     code: str = Field(pattern=r'^\d{4,10}$')
 
 
+class SyncOptions(BaseModel):
+    timezone: str = Field(default='America/Los_Angeles', max_length=80)
+
+
 def busy():
     if not LOCK.acquire(blocking=False):
         raise HTTPException(409, 'A Garmin request is already running. Please wait.')
@@ -106,13 +111,20 @@ def mfa(body: MFA):
 
 
 @app.post('/api/garmin/sync')
-def sync():
+def sync(body: SyncOptions | None = None):
     busy()
     try:
-        value = BRIDGE.sync()
+        timezone = body.timezone if body else 'America/Los_Angeles'
+        try:
+            ZoneInfo(timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise HTTPException(422, 'Choose a valid timezone.') from None
+        value = BRIDGE.sync(timezone=timezone)
         with db() as conn:
             conn.execute('INSERT OR REPLACE INTO snapshot VALUES(1, ?)', (json.dumps(value, allow_nan=False),))
         return value
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(502, 'Could not finish Garmin sync. Your previous import is preserved. Try again later or reconnect.') from None
     finally:

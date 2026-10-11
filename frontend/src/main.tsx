@@ -48,6 +48,7 @@ import {
   readStored,
   saveStored,
   normalizeImport,
+  mergeSnapshots,
   download,
 } from "./data";
 import type { Snapshot, Settings, Run, Wellness } from "./types";
@@ -123,10 +124,18 @@ function App() {
       ),
     );
   const week = plan.weeks[Math.min(weekIndex, plan.weeks.length - 1)];
-  const wellness = [...snapshot.wellness].sort((a, b) =>
-    b.date.localeCompare(a.date),
+  const wellness = [...snapshot.wellness]
+    .filter((w) => w.date <= today)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const available = wellness.filter((w) => w.date <= today);
+  const sleep = available.find(
+    (w) => w.sleepScore != null || w.sleepHours != null,
   );
-  const signals = recovery(wellness[0], today, wellness);
+  const hrv = available.find((w) => w.hrvMs != null || w.hrv7DayMs != null);
+  const signalDay = available.find(
+    (w) => w.sleepScore != null || w.sleepHours != null || w.hrv7DayMs != null,
+  );
+  const signals = recovery(signalDay, today, wellness);
   const outcomes = progress(snapshot);
   const pred = prediction(config, snapshot);
   const hist = history(snapshot);
@@ -169,27 +178,7 @@ function App() {
               .then((raw) => {
                 if (!raw?.syncedAt) return;
                 const imported = normalizeImport(raw);
-                setPersonal((previous) => ({
-                  ...imported,
-                  runs: [
-                    ...new Map(
-                      [
-                        ...imported.runs,
-                        ...previous.runs.filter(
-                          (r) => !r.id.startsWith("garmin-"),
-                        ),
-                      ].map((r) => [r.id, r]),
-                    ).values(),
-                  ],
-                  wellness: [
-                    ...new Map(
-                      [...imported.wellness, ...previous.wellness].map((w) => [
-                        w.date,
-                        w,
-                      ]),
-                    ).values(),
-                  ],
-                }));
+                setPersonal((previous) => mergeSnapshots(previous, imported));
                 setMode("personal");
               })
               .catch(() => {});
@@ -239,8 +228,12 @@ function App() {
     setBusy(true);
     setError("");
     try {
-      const data = normalizeImport(await api("garmin/sync"));
-      setPersonal(data);
+      const data = normalizeImport(
+        await api("garmin/sync", {
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      );
+      setPersonal((previous) => mergeSnapshots(previous, data));
       setMode("personal");
       setConnected(true);
       setModal(null);
@@ -277,6 +270,7 @@ function App() {
       goalMinutes: Number(f.get("hours")) * 60 + Number(f.get("minutes")),
       days: Number(f.get("days")),
       weeklyKm: km(Number(f.get("weeklyKm"))),
+      peakWeeklyKm: km(Number(f.get("peakWeeklyKm"))),
       longestKm: km(Number(f.get("longestKm"))),
       recentRaceKm: km(Number(f.get("recentRaceKm"))),
       recentRaceMinutes: Number(f.get("recentRaceMinutes")),
@@ -488,6 +482,7 @@ function App() {
             [CalendarDays, "Training plan"],
             [Footprints, "Run journal"],
             [Heart, "Recovery"],
+            [Activity, "Performance"],
             [TrendingUp, "Progress & science"],
           ].map(([Icon, label]) => (
             <button
@@ -621,7 +616,9 @@ function App() {
                       ? "Every mile counts."
                       : view === "Recovery"
                         ? "Listen. Then run."
-                        : "Show the work."}
+                        : view === "Performance"
+                          ? "Know your engine."
+                          : "Show the work."}
               </h1>
               <p>
                 {view === "Overview"
@@ -632,7 +629,9 @@ function App() {
                       ? "The early starts, the easy days, the miles you showed up for."
                       : view === "Recovery"
                         ? "Sleep, HRV, and how you feel — with room for the whole picture."
-                        : "Track what changes. Understand what the research actually supports."}
+                        : view === "Performance"
+                          ? "The metrics your watch measured, with the dates and context that matter."
+                          : "Track what changes. Understand what the research actually supports."}
               </p>
             </div>
             <button
@@ -837,9 +836,7 @@ function App() {
                     {signals.label}
                   </div>
                   <small>
-                    {wellness[0]
-                      ? dateLabel(wellness[0].date)
-                      : "No check-in yet"}{" "}
+                    {signalDay ? dateLabel(signalDay!.date) : "No check-in yet"}{" "}
                     ·{" "}
                     <button
                       className="inline-link"
@@ -899,13 +896,13 @@ function App() {
                   <RecoveryRow
                     label="Sleep"
                     value={
-                      wellness[0]?.sleepHours != null
-                        ? `${wellness[0].sleepHours.toFixed(1)} h`
+                      sleep?.sleepHours != null
+                        ? `${sleep!.sleepHours.toFixed(1)} h`
                         : "—"
                     }
                     detail={
-                      wellness[0]?.sleepScore != null
-                        ? `Score ${wellness[0].sleepScore} / 100`
+                      sleep?.sleepScore != null
+                        ? `Score ${sleep!.sleepScore} / 100`
                         : "No sleep data"
                     }
                     bars={wellness
@@ -915,14 +912,10 @@ function App() {
                   />
                   <RecoveryRow
                     label="Overnight HRV"
-                    value={
-                      wellness[0]?.hrvMs != null
-                        ? `${wellness[0].hrvMs} ms`
-                        : "—"
-                    }
+                    value={hrv?.hrvMs != null ? `${hrv!.hrvMs} ms` : "—"}
                     detail={
-                      wellness[0]?.hrvBaselineLow != null
-                        ? `Personal range ${wellness[0].hrvBaselineLow}–${wellness[0].hrvBaselineHigh ?? "…"} ms`
+                      hrv?.hrvBaselineLow != null
+                        ? `Personal range ${hrv!.hrvBaselineLow}–${hrv!.hrvBaselineHigh ?? "…"} ms`
                         : "Personal baseline unavailable"
                     }
                     bars={wellness
@@ -986,6 +979,38 @@ function App() {
                   </button>
                 </div>
               </section>
+              <div className="peak-summary">
+                <span>
+                  Starting week{" "}
+                  <b>
+                    {d(config.weeklyKm).toFixed(1)} {unit}
+                  </b>
+                </span>
+                <span>
+                  Peak training week{" "}
+                  <b>
+                    {d(
+                      Math.max(0, ...plan.weeks.slice(0, -1).map((w) => w.km)),
+                    ).toFixed(1)}{" "}
+                    {unit}
+                  </b>
+                </span>
+                <span>
+                  Longest run{" "}
+                  <b>
+                    {d(
+                      Math.max(
+                        ...plan.weeks.flatMap((w) =>
+                          w.sessions
+                            .filter((s) => s.kind === "Long run")
+                            .map((s) => s.km),
+                        ),
+                      ),
+                    ).toFixed(1)}{" "}
+                    {unit}
+                  </b>
+                </span>
+              </div>
               {plan.warnings.map((w) => (
                 <p className="callout" key={w}>
                   {distanceMessage(w, unit)}
@@ -1151,8 +1176,8 @@ function App() {
               <section className="recovery-hero">
                 <div>
                   <span className="eyebrow">
-                    {wellness[0]
-                      ? dateLabel(wellness[0].date).toUpperCase()
+                    {signalDay
+                      ? dateLabel(signalDay!.date).toUpperCase()
                       : "YOUR DAILY CHECK-IN"}
                   </span>
                   <h2>{signals.label}.</h2>
@@ -1169,12 +1194,16 @@ function App() {
                 <section className="panel">
                   <span className="eyebrow">SLEEP</span>
                   <div className="large-number">
-                    {wellness[0]?.sleepHours?.toFixed(1) ?? "—"}{" "}
-                    <span>hours</span>
+                    {sleep?.sleepHours?.toFixed(1) ?? "—"} <span>hours</span>
                   </div>
+                  <p className="metric-date">
+                    {sleep
+                      ? `Latest available: ${dateLabel(sleep.date)}`
+                      : "No sleep reading returned by Garmin."}
+                  </p>
                   <p>
-                    {wellness[0]?.sleepScore != null
-                      ? `Sleep score: ${wellness[0].sleepScore} / 100`
+                    {sleep?.sleepScore != null
+                      ? `Sleep score: ${sleep!.sleepScore} / 100`
                       : "No sleep score available."}
                   </p>
                   <SignalChart
@@ -1190,11 +1219,21 @@ function App() {
                     OVERNIGHT HEART RATE VARIABILITY
                   </span>
                   <div className="large-number">
-                    {wellness[0]?.hrvMs ?? "—"} <span>ms</span>
+                    {hrv?.hrvMs ?? "—"} <span>ms</span>
                   </div>
+                  <p className="metric-date">
+                    {hrv
+                      ? `Latest available: ${dateLabel(hrv.date)}`
+                      : "No overnight HRV returned by Garmin."}
+                  </p>
                   <p>
-                    {wellness[0]?.hrvBaselineLow != null
-                      ? `Your personal baseline: ${wellness[0].hrvBaselineLow}–${wellness[0].hrvBaselineHigh ?? "…"} ms`
+                    {hrv?.hrv7DayMs != null
+                      ? `7-day average: ${hrv.hrv7DayMs} ms`
+                      : "7-day average unavailable"}
+                  </p>
+                  <p>
+                    {hrv?.hrvBaselineLow != null
+                      ? `Your personal baseline: ${hrv!.hrvBaselineLow}–${hrv!.hrvBaselineHigh ?? "…"} ms`
                       : "Sync or add your own baseline to put HRV in context."}
                   </p>
                   <SignalChart
@@ -1228,6 +1267,161 @@ function App() {
                 >
                   Read Garmin’s HRV guide <ExternalLink size={14} />
                 </a>
+              </section>
+            </>
+          )}
+          {view === "Performance" && (
+            <>
+              <div className="recovery-grid performance-grid">
+                <section className="panel">
+                  <span className="eyebrow">GARMIN VO₂ MAX</span>
+                  <div className="large-number">
+                    {snapshot.performance?.vo2Max?.toFixed(1) ?? "—"}
+                    <span> ml/kg/min</span>
+                  </div>
+                  <p>
+                    {snapshot.performance?.vo2Date
+                      ? `Measured ${dateLabel(snapshot.performance.vo2Date)}`
+                      : "No VO₂ max returned yet."}
+                  </p>
+                  <p>Watch estimate, not a laboratory measurement.</p>
+                </section>
+                <section className="panel">
+                  <span className="eyebrow">LATEST RUN CADENCE</span>
+                  <div className="large-number">
+                    {recentRuns
+                      .find((r) => r.cadenceSpm != null)
+                      ?.cadenceSpm?.toFixed(0) ?? "—"}
+                    <span> steps/min</span>
+                  </div>
+                  <p>
+                    {recentRuns.find((r) => r.cadenceSpm != null)
+                      ? `Run on ${dateLabel(recentRuns.find((r) => r.cadenceSpm != null)!.date)}`
+                      : "No cadence returned yet."}
+                  </p>
+                  <p>Reported running steps per minute; no doubling applied.</p>
+                </section>
+                <section className="panel">
+                  <span className="eyebrow">RESTING HEART RATE</span>
+                  <div className="large-number">
+                    {available.find((w) => w.restingHr != null)?.restingHr ??
+                      "—"}
+                    <span> bpm</span>
+                  </div>
+                  <p>
+                    {available.find((w) => w.restingHr != null)
+                      ? `Recorded ${dateLabel(available.find((w) => w.restingHr != null)!.date)}`
+                      : "No resting heart rate returned yet."}
+                  </p>
+                </section>
+                <section className="panel">
+                  <span className="eyebrow">GARMIN TRAINING READINESS</span>
+                  <div className="large-number">
+                    {snapshot.performance?.trainingReadiness ?? "—"}
+                    <span> /100</span>
+                  </div>
+                  <p>
+                    {snapshot.performance?.readinessDate
+                      ? `Recorded ${dateLabel(snapshot.performance.readinessDate)}`
+                      : "Not returned by Garmin for the synced day."}
+                  </p>
+                  <p>
+                    This is Garmin’s score, separate from Milemark’s recovery
+                    rules.
+                  </p>
+                </section>
+              </div>
+              <section className="panel journal-panel">
+                <div className="panel-heading">
+                  <h2>Garmin race predictions</h2>
+                  <small>
+                    {snapshot.performance?.racePredictions?.date
+                      ? dateLabel(snapshot.performance.racePredictions.date)
+                      : "No prediction date"}
+                  </small>
+                </div>
+                <div className="prediction-grid">
+                  {[
+                    ["5K", snapshot.performance?.racePredictions?.fiveKSec],
+                    ["10K", snapshot.performance?.racePredictions?.tenKSec],
+                    [
+                      "Half marathon",
+                      snapshot.performance?.racePredictions?.halfSec,
+                    ],
+                    [
+                      "Marathon",
+                      snapshot.performance?.racePredictions?.marathonSec,
+                    ],
+                  ].map(([label, value]) => (
+                    <div key={String(label)}>
+                      <span>{label}</span>
+                      <strong>
+                        {typeof value === "number"
+                          ? formatTime(value / 60)
+                          : "—"}
+                      </strong>
+                      <small>hr:min · Garmin estimate</small>
+                    </div>
+                  ))}
+                </div>
+                <p className="fineprint">
+                  Forecasts are Garmin estimates, not a promise or a replacement
+                  for actual race benchmarks.
+                </p>
+              </section>
+              <section className="panel journal-panel">
+                <div className="panel-heading">
+                  <h2>Run performance details</h2>
+                  <small>Latest 20 recorded runs</small>
+                </div>
+                <div className="performance-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Run</th>
+                        <th>Cadence</th>
+                        <th>Avg / max HR</th>
+                        <th>Avg power</th>
+                        <th>Aerobic / anaerobic TE</th>
+                        <th>Ground contact</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentRuns.slice(0, 20).map((r) => (
+                        <tr key={r.id}>
+                          <td>
+                            <strong>{r.name}</strong>
+                            <small>{dateLabel(r.date)}</small>
+                          </td>
+                          <td>
+                            {r.cadenceSpm?.toFixed(0) ?? "—"} <small>spm</small>
+                          </td>
+                          <td>
+                            {r.avgHr?.toFixed(0) ?? "—"} /{" "}
+                            {r.maxHr?.toFixed(0) ?? "—"} <small>bpm</small>
+                          </td>
+                          <td>
+                            {r.avgPowerW?.toFixed(0) ?? "—"} <small>W</small>
+                          </td>
+                          <td>
+                            {r.aerobicEffect?.toFixed(1) ?? "—"} /{" "}
+                            {r.anaerobicEffect?.toFixed(1) ?? "—"}
+                          </td>
+                          <td>
+                            {r.groundContactMs?.toFixed(0) ?? "—"}{" "}
+                            <small>ms</small>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {!recentRuns.length && (
+                    <p className="fineprint">
+                      Sync Garmin or log a run to populate this journal.
+                      Wearable metrics are only shown when provided.
+                    </p>
+                  )}
+                </div>
               </section>
             </>
           )}
@@ -1440,6 +1634,25 @@ function App() {
                     />
                   </label>
                 </div>
+                <label>
+                  Peak {unit} / week
+                  <input
+                    name="peakWeeklyKm"
+                    type="number"
+                    min={d(32.18688)}
+                    max={d(160)}
+                    step="any"
+                    defaultValue={Number(
+                      d(settings.peakWeeklyKm ?? 56.32704).toFixed(2),
+                    )}
+                    required
+                  />
+                </label>
+                <small>
+                  Typical marathon peak: 30–40 miles/week. The plan uses the
+                  available months to build toward this target; short timelines
+                  show what is reachable.
+                </small>
                 <details>
                   <summary>
                     Recent race for an estimated finish time (optional)
@@ -1827,9 +2040,10 @@ function App() {
               <p>
                 Current weekly volume anchors a gradual build, with a reduced
                 week every fourth build week and a three-week taper. Long runs
-                are capped at {d(30).toFixed(1)} {unit} and 40% of weekly
-                volume. Time beyond a 20-week build stays in a base phase. These
-                are app design choices, not a validated training prescription.
+                are capped at {d(28.968192).toFixed(1)} {unit} and 45–50% of
+                weekly volume. Earlier months build the base toward your peak
+                target. These are app design choices, not a validated training
+                prescription.
               </p>
               <h3>Estimates & recovery</h3>
               <p>

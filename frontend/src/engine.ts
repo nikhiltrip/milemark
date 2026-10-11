@@ -40,6 +40,13 @@ export function validate(s: Settings, today = iso(new Date())): string[] {
   )
     e.push("Goal time must be between 2 and 10 hours.");
   if (![3, 4, 5, 6].includes(s.days)) e.push("Choose 3–6 running days.");
+  if (
+    s.peakWeeklyKm != null &&
+    (!Number.isFinite(s.peakWeeklyKm) ||
+      s.peakWeeklyKm < 32.18688 ||
+      s.peakWeeklyKm > 160)
+  )
+    e.push("Peak weekly volume must be between 32.2 and 160 km.");
   if (!Number.isFinite(s.weeklyKm) || s.weeklyKm < 10 || s.weeklyKm > 160)
     e.push("Enter a recent weekly volume between 10 and 160 km.");
   if (
@@ -179,7 +186,7 @@ export function generatePlan(
   const warnings: string[] = [];
   if (count < 12)
     warnings.push(
-      "Less than 12 weeks remain. This schedule preserves your base rather than trying to rush marathon fitness.",
+      "Less than 12 weeks remain. The schedule may not reach the requested peak; do not rush marathon fitness.",
     );
   if (s.weeklyKm < 25)
     warnings.push(
@@ -189,6 +196,18 @@ export function generatePlan(
     warnings.push(
       "Three days limits marathon preparation. Keep the goal flexible and consider coach guidance.",
     );
+  const targetPeak =
+    s.peakWeeklyKm ??
+    (s.days === 3 ? 48.28032 : s.days === 4 ? 56.32704 : 64.37376);
+  const peakCap = Math.max(s.weeklyKm, targetPeak);
+  const peakWeek = count - 4;
+  const growthWeeks = Array.from(
+    { length: Math.max(0, peakWeek) },
+    (_, i) => i + 1,
+  ).filter((i) => i % 4 !== 3).length;
+  const requiredGrowth =
+    growthWeeks > 0 ? Math.pow(peakCap / s.weeklyKm, 1 / growthWeeks) - 1 : 0;
+  const growthRate = Math.min(0.06, Math.max(0, requiredGrowth));
   const active: Record<number, number[]> = {
     3: [1, 3, 6],
     4: [1, 3, 5, 6],
@@ -198,23 +217,25 @@ export function generatePlan(
   let volume = s.weeklyKm,
     long = s.longestKm;
   const weeks: Week[] = [];
-  // Extra time before a 20-week build is a steady base phase, never a 40-week mileage ramp.
-  const buildStart = Math.max(0, count - 20),
-    peakCap = Math.max(s.weeklyKm, Math.min(80, s.weeklyKm * 1.65));
+  // Earlier months build the base toward an explicit marathon target, rather
+  // than freezing a low baseline. A short timeline never forces the target.
+  const buildStart = Math.max(0, count - 20);
   for (let i = 0; i < count; i++) {
     const left = count - i - 1,
       build = i - buildStart,
-      cutback = build >= 0 && build % 4 === 3;
+      cutback = i % 4 === 3;
     let phase =
       build < 0
-        ? "Base"
+        ? cutback
+          ? "Recovery week"
+          : "Base"
         : left < 3
           ? "Taper"
           : cutback
             ? "Recovery week"
             : "Build";
-    if (build >= 0 && left >= 3 && build > 0) {
-      if (!cutback) volume = Math.min(peakCap, volume * 1.045);
+    if (left >= 3 && i > 0) {
+      if (!cutback) volume = Math.min(peakCap, volume * (1 + growthRate));
     }
     // Taper always takes precedence over a recovery-week index. The race itself
     // is excluded from the taper training budget. These fractions are app
@@ -230,12 +251,12 @@ export function generatePlan(
               ? 0.8
               : 1;
     const total = round(volume * taperFactor);
-    if (build >= 0 && left >= 3 && !cutback) long = Math.min(30, long + 1);
+    if (i > 0 && left >= 3 && !cutback) long = Math.min(28.968192, long + 1.2);
     const longKm = round(
       Math.min(
         long * (cutback ? 0.8 : left === 2 ? 0.75 : left === 1 ? 0.5 : 1),
-        total * 0.4,
-        30,
+        total * (s.days <= 4 ? 0.5 : 0.45),
+        28.968192,
       ),
     );
     const start = shift(first, i * 7),
@@ -299,6 +320,11 @@ export function generatePlan(
       sessions,
     });
   }
+  const attainedPeak = Math.max(0, ...weeks.slice(0, -1).map((w) => w.km));
+  if (attainedPeak < targetPeak * 0.97)
+    warnings.push(
+      `The requested ${targetPeak.toFixed(1)} km peak is not reachable from this starting mileage within the remaining time under the progression limit. This plan reaches ${attainedPeak.toFixed(1)} km; allow more preparation time instead of forcing a jump.`,
+    );
   const maxLong = Math.max(
     0,
     ...weeks.flatMap((w) =>

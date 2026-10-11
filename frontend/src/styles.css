@@ -1993,6 +1993,116 @@ dialog::backdrop {
 .units button {
   min-width: 28px;
 }
+.peak-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.peak-summary > span {
+  border: 1px solid var(--line);
+  padding: 16px 20px;
+  border-radius: 4px;
+  font-size: 10px;
+  color: #70849a;
+  background: #fff;
+}
+.peak-summary b {
+  display: block;
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 500;
+  color: #263442;
+}
+.performance-table {
+  overflow: auto;
+}
+.performance-table table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 700px;
+  text-align: left;
+}
+.performance-table th {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: #7b8b9d;
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.performance-table td {
+  font-size: 11px;
+  padding: 16px 12px;
+  border-bottom: 1px solid #edf0f4;
+}
+.performance-table td strong {
+  display: block;
+  font-weight: 500;
+}
+.performance-table small {
+  color: #7b8b9d;
+  font-size: 9px;
+}
+.performance-table td:first-child small {
+  display: block;
+  margin-top: 5px;
+}
+.prediction-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+.prediction-grid > div {
+  display: grid;
+  gap: 8px;
+}
+.prediction-grid span {
+  font-size: 11px;
+  color: #728398;
+}
+.prediction-grid strong {
+  font-size: 29px;
+  font-weight: 500;
+}
+.prediction-grid small {
+  font-size: 9px;
+  color: #7b8b9d;
+}
+.metric-date {
+  color: #73849a;
+  font-size: 10px;
+}
+.performance-grid .panel > p {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #728398;
+}
+@media (max-width: 760px) {
+  .peak-summary {
+    gap: 7px;
+  }
+  .peak-summary > span {
+    padding: 13px 10px;
+    font-size: 8px;
+  }
+  .peak-summary b {
+    font-size: 20px;
+  }
+  .prediction-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sidebar .side-race {
+    margin-top: 20px;
+  }
+  .sidebar nav {
+    gap: 2px;
+  }
+  .sidebar nav button {
+    padding: 11px 12px;
+  }
+}
 .units button.selected {
   color: #d4450b;
 }

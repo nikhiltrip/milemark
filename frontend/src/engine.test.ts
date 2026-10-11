@@ -9,7 +9,7 @@ import {
   validate,
   progress,
 } from "./engine";
-import { normalizeImport } from "./data";
+import { normalizeImport, mergeSnapshots } from "./data";
 import type { Settings } from "./types";
 const today = "2026-10-15";
 const base: Settings = {
@@ -22,13 +22,14 @@ const base: Settings = {
   recentRaceKm: 21.0975,
   recentRaceMinutes: 110,
 };
-test("long lead times stay in base instead of compounding mileage", () => {
+test("long lead times build toward a bounded marathon peak", () => {
   const { weeks } = generatePlan({ ...base, raceDate: "2027-10-24" }, today);
   const bases = weeks.filter((w) => w.phase === "Base");
   assert.ok(bases.length > 20);
-  bases.forEach((w) => assert.ok(Math.abs(w.km - 30) < 0.3));
+  assert.ok(bases.at(-1)!.km > bases[0].km);
   const nonRace = weeks.slice(0, -1);
-  assert.ok(nonRace.every((w) => w.km <= 50));
+  assert.ok(nonRace.every((w) => w.km <= 56.6));
+  assert.ok(Math.max(...nonRace.map((w) => w.km)) >= 56);
   assert.ok(weeks.some((w) => w.phase === "Recovery week"));
   assert.equal(weeks.at(-1)?.phase, "Race week");
   for (const w of nonRace.slice(0, -2))
@@ -39,8 +40,8 @@ test("long runs stay capped and taper precedes exact race date", () => {
   for (const w of weeks)
     for (const s of w.sessions)
       if (s.kind === "Long run") {
-        assert.ok(s.km <= 30);
-        assert.ok(s.km <= w.km * 0.41);
+        assert.ok(s.km <= 29);
+        assert.ok(s.km <= w.km * 0.51);
       }
   const race = weeks
     .flatMap((w) => w.sessions)
@@ -211,4 +212,76 @@ test("progress comparisons require comparable race efforts and report actual cha
     ).paceImprovement,
     null,
   );
+});
+
+test("low base with the SF lead time reaches a 30–40 mile peak instead of a 10-mile ceiling", () => {
+  const { weeks } = generatePlan(
+    {
+      ...base,
+      raceDate: "2027-07-25",
+      weeklyKm: 10,
+      longestKm: 4,
+      peakWeeklyKm: 56.32704,
+    },
+    today,
+  );
+  const peak = Math.max(...weeks.slice(0, -3).map((w) => w.km));
+  assert.ok(peak >= 48.28032 && peak <= 56.7);
+  assert.ok(
+    Math.max(
+      ...weeks.flatMap((w) =>
+        w.sessions.filter((s) => s.kind === "Long run").map((s) => s.km),
+      ),
+    ) >= 24,
+  );
+});
+test("a short timeline cannot force a large peak-mileage jump", () => {
+  const { weeks, warnings } = generatePlan(
+    {
+      ...base,
+      raceDate: shift(today, 35),
+      weeklyKm: 10,
+      longestKm: 4,
+      peakWeeklyKm: 64.37376,
+    },
+    today,
+  );
+  assert.ok(Math.max(...weeks.slice(0, -1).map((w) => w.km)) < 14);
+  assert.ok(warnings.some((w) => w.includes("not reachable")));
+});
+test("fresh imported health fields replace cached missing values while old known values survive null updates", () => {
+  const cached = {
+    runs: [],
+    wellness: [{ date: today, sleepScore: null, hrvMs: null, restingHr: 50 }],
+  };
+  const merged = mergeSnapshots(cached, {
+    runs: [],
+    wellness: [{ date: today, sleepScore: 80, hrvMs: 55, restingHr: null }],
+  });
+  assert.equal(merged.wellness[0].sleepScore, 80);
+  assert.equal(merged.wellness[0].hrvMs, 55);
+  assert.equal(merged.wellness[0].restingHr, 50);
+});
+test("imports retain valid wearable performance fields and reject impossible numbers", () => {
+  const record = {
+    id: "r",
+    date: today,
+    name: "Run",
+    distanceKm: 5,
+    durationSec: 1800,
+    cadenceSpm: 165,
+    maxHr: 175,
+    avgPowerW: 230,
+    aerobicEffect: 3.2,
+    vo2Max: 51,
+  };
+  const imported = normalizeImport({
+    runs: [record],
+    wellness: [],
+    performance: { vo2Max: 51, vo2Date: today, trainingReadiness: 500 },
+  });
+  assert.equal(imported.runs[0].cadenceSpm, 165);
+  assert.equal(imported.runs[0].avgPowerW, 230);
+  assert.equal(imported.performance!.vo2Max, 51);
+  assert.equal(imported.performance!.trainingReadiness, null);
 });

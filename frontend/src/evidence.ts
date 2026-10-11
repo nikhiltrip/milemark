@@ -32,7 +32,7 @@ export const evidence = [
     finding:
       "Buist et al. (2008) found that a 13-week program applying the 10% rule did not reduce injury incidence compared with an eight-week program preparing novices for a 6.7 km event.",
     application:
-      "The app’s 4.5% build increment, recovery weeks, and volume caps are configurable heuristics. They are not proven injury-prevention rules or a guarantee of marathon readiness.",
+      "The app’s progression limit of up to 6% per ordinary build week, recovery weeks, and volume caps are configurable heuristics. They are not proven injury-prevention rules or a guarantee of marathon readiness.",
     url: "https://pubmed.ncbi.nlm.nih.gov/17940147/",
   },
 ];

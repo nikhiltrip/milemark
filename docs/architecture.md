@@ -19,7 +19,7 @@ The hosted static version supports the demo and manual mode. It does not reach t
 
 `garmin.py` isolates the external client contract. The login handler uses an in-memory client for MFA continuation; tokens are persisted only after success. A fresh login through the cached session loads the profile required by sleep requests. Plaintext passwords are discarded after login initiation. No credentials appear in source or browser storage.
 
-Sync imports up to one year / 1,000 most recent activities and 14 days of sleep/HRV. Activity retrieval failure preserves the previous SQLite snapshot. A missing health endpoint produces a warning and null metrics rather than a fabricated score. Race flags come from structured event metadata, not a name heuristic. Summaries omit location and raw account payloads.
+Sync imports up to one year / 1,000 most recent activities and 28 days of sleep/HRV through bulk endpoints, with recent sleep-detail fallback. Activity retrieval failure preserves the previous SQLite snapshot. A missing health endpoint produces a warning and null metrics rather than a fabricated score. The browser timezone selects the sync day. Fresh non-null imports replace previously missing cached fields; the UI shows the latest available metric with its date. VO₂ max checks 90 days of Garmin max metrics plus activity summaries. Race flags come from structured event metadata, not a name heuristic. Summaries omit location and raw account payloads.
 
 The single-user service serializes Garmin operations, limits login retries, rejects remote clients/foreign origins, and requires a browser-request token on mutations. Tokens and the database are ignored by Git. Live Garmin sign-in and sync have been verified with the owner’s account.
 
@@ -29,7 +29,7 @@ Unit conversion happens at display/input/export boundaries. Stored distances sta
 
 The engine handles local-calendar dates at noon to avoid UTC date shifts. Plans use a stable Monday-based calendar with an exact race-day event and no postrace running. Test cases cover Sunday and midweek races.
 
-Current volume is always explicit. Imported activity history can prefill a recent four-complete-week average and a longest recent run, which the runner reviews in goal settings. A goal time never invents physiological data or guarantees an outcome.
+Current volume is always explicit. Imported activity history can prefill a recent four-complete-week average and a longest recent run, which the runner reviews in goal settings. A goal time never invents physiological data or guarantees an outcome. Peak volume is an explicit target (35 miles/week by default on four days), rather than a fixed multiple of a potentially low starting base.
 
 The browser maintains a labeled sample mode separately from the personal journal. Imports validate dates, finite numbers, array limits, and units. Exports use a small normalized schema that excludes credentials and GPS points.
 

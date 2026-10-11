@@ -1,6 +1,7 @@
 """Read-only personal Garmin adapter. Not an official Garmin API integration."""
-from datetime import date, timedelta, datetime, timezone
+from datetime import date, timedelta, datetime, timezone as utc_timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import math
 import os
 from garminconnect import Garmin
@@ -35,6 +36,13 @@ def normalize_run(item):
         'distanceKm': round(distance / 1000, 3), 'durationSec': duration,
         'avgHr': number(item.get('averageHR'), 20, 250),
         'elevationM': number(item.get('elevationGain')),
+        'cadenceSpm': number(item.get('averageRunningCadenceInStepsPerMinute'), 40, 300),
+        'maxHr': number(item.get('maxHR'), 20, 250),
+        'avgPowerW': number(item.get('avgPower'), 1, 2000),
+        'aerobicEffect': number(item.get('aerobicTrainingEffect'), 0, 5),
+        'anaerobicEffect': number(item.get('anaerobicTrainingEffect'), 0, 5),
+        'vo2Max': number(item.get('vO2MaxValue'), 10, 100),
+        'groundContactMs': number(item.get('avgGroundContactTime'), 50, 1000),
         # Names containing 'race' are not reliable proof of an all-out race.
         'race': (item.get('eventType') or {}).get('typeKey') == 'race',
     }
@@ -42,18 +50,45 @@ def normalize_run(item):
 
 def normalize_wellness(day, sleep, hrv):
     dto = (sleep or {}).get('dailySleepDTO') or {}
+    values = (sleep or {}).get('values') or {}
     scores = dto.get('sleepScores') or {}
-    summary = (hrv or {}).get('hrvSummary') or {}
+    summary = (hrv or {}).get('hrvSummary') or hrv or {}
     baseline = summary.get('baseline') or {}
-    seconds = number(dto.get('sleepTimeSeconds'), 0, 86400)
+    def pick(*items):
+        return next((value for value in items if value is not None), None)
+    seconds = number(pick(dto.get('sleepTimeSeconds'), values.get('totalSleepTimeInSeconds')), 1, 86400)
     return {
         'date': day,
-        'sleepScore': number((scores.get('overall') or {}).get('value'), 0, 100),
+        'sleepScore': number(pick((scores.get('overall') or {}).get('value'), values.get('sleepScore')), 0, 100),
         'sleepHours': round(seconds / 3600, 2) if seconds is not None else None,
-        'hrvMs': number(summary.get('lastNightAvg'), 0, 500),
-        'hrv7DayMs': number(summary.get('weeklyAvg'), 0, 500),
+        'hrvMs': number(pick(summary.get('lastNightAvg'), (sleep or {}).get('avgOvernightHrv'), values.get('avgOvernightHrv')), 1, 500),
+        'hrv7DayMs': number(pick(summary.get('weeklyAvg'), values.get('hrv7dAverage')), 1, 500),
         'hrvBaselineLow': number(baseline.get('balancedLow'), 0, 500),
         'hrvBaselineHigh': number(baseline.get('balancedUpper'), 0, 500),
+        'restingHr': number(pick((sleep or {}).get('restingHeartRate'), values.get('restingHeartRate')), 20, 250),
+    }
+
+
+def normalize_performance(metrics, readiness, predictions, runs):
+    rows = metrics if isinstance(metrics, list) else []
+    vo2 = [row.get('generic') for row in rows if isinstance(row, dict) and isinstance(row.get('generic'), dict)]
+    vo2 = sorted((row for row in vo2 if number(row.get('vo2MaxPreciseValue') or row.get('vo2MaxValue'), 10, 100) is not None), key=lambda row: row.get('calendarDate', ''), reverse=True)
+    from_run = next((r for r in sorted(runs, key=lambda r: r['date'], reverse=True) if r.get('vo2Max') is not None), None)
+    value = vo2[0] if vo2 else None
+    # Prefer the newest dated measurement, including VO2 reported on a run.
+    if from_run and (not value or from_run['date'] > value.get('calendarDate', '')):
+        value = {'vo2MaxValue': from_run['vo2Max'], 'calendarDate': from_run['date']}
+    readiness_rows = readiness if isinstance(readiness, list) else []
+    ready = next((r for r in sorted(readiness_rows, key=lambda x: x.get('timestampLocal', ''), reverse=True) if number(r.get('score'), 0, 100) is not None), {})
+    pred = predictions if isinstance(predictions, dict) else {}
+    return {
+        'vo2Max': number(value.get('vo2MaxPreciseValue') or value.get('vo2MaxValue'), 10, 100) if value else None,
+        'vo2Date': value.get('calendarDate') if value else None,
+        'trainingReadiness': number(ready.get('score'), 0, 100),
+        'readinessDate': ready.get('calendarDate') or str(ready.get('timestampLocal') or '')[:10] or None,
+        'racePredictions': {'date': pred.get('calendarDate'), 'fiveKSec': number(pred.get('time5K'), 100, 100000),
+                            'tenKSec': number(pred.get('time10K'), 100, 100000), 'halfSec': number(pred.get('timeHalfMarathon'), 100, 100000),
+                            'marathonSec': number(pred.get('timeMarathon'), 100, 100000)},
     }
 
 
@@ -104,11 +139,11 @@ class GarminBridge:
         self.client = None
         self.pending = False
 
-    def sync(self, today=None):
+    def sync(self, today=None, timezone='America/Los_Angeles'):
         if not self.client or self.pending:
             if not self.restore():
                 raise ValueError('Connect your Garmin account first.')
-        today = today or date.today()
+        today = today or datetime.now(ZoneInfo(timezone)).date()
         runs, warnings = [], []
         cutoff = today - timedelta(days=365)
         # Bounded pagination: at most 1,000 recent activities; no write methods.
@@ -124,18 +159,37 @@ class GarminBridge:
                 break
         else:
             warnings.append('Activity import limited to the 1,000 most recent activities.')
+        def optional(name, *args):
+            try:
+                return getattr(self.client, name)(*args)
+            except Exception:
+                warnings.append(f'{name.removeprefix("get_").replace("_", " ").capitalize()} could not be retrieved. Other imported data is preserved.')
+                return None
+        end = today.isoformat()
+        start = (today - timedelta(days=27)).isoformat()
+        sleep_rows = optional('get_sleep_daily', start, end)
+        hrv_range = optional('get_hrv_data_range', start, end)
+        sleeps = {row.get('calendarDate'): row for row in sleep_rows if isinstance(row, dict)} if isinstance(sleep_rows, list) else {}
+        summaries = hrv_range.get('hrvSummaries') or [] if isinstance(hrv_range, dict) else []
+        hrvs = {row.get('calendarDate'): row for row in summaries if isinstance(row, dict)}
         wellness = []
-        for delta in range(14):
+        for delta in range(28):
             day = (today - timedelta(days=delta)).isoformat()
-            values = []
-            for method in (self.client.get_sleep_data, self.client.get_hrv_data):
-                try:
-                    values.append(method(day))
-                except Exception:
-                    values.append({})
-                    warnings.append(f"Some recovery data is unavailable for {day}.")
-            wellness.append(normalize_wellness(day, *values))
+            sleep = sleeps.get(day, {})
+            normalized = normalize_wellness(day, sleep, hrvs.get(day, {}))
+            # Different Garmin devices expose overnight HRV in sleep details.
+            # Only fetch recent missing details; bulk endpoints cover history.
+            if delta < 7 and (normalized['sleepScore'] is None or normalized['hrvMs'] is None):
+                detail = optional('get_sleep_data', day)
+                if isinstance(detail, dict):
+                    extra = normalize_wellness(day, detail, hrvs.get(day, {}))
+                    normalized = {key: extra.get(key) if extra.get(key) is not None else value for key, value in normalized.items()}
+            wellness.append(normalized)
+        metrics = optional('get_max_metrics_range', (today - timedelta(days=90)).isoformat(), end)
+        readiness = optional('get_training_readiness', end)
+        predictions = optional('get_race_predictions')
+        performance = normalize_performance(metrics, readiness, predictions, runs)
         # No raw payloads, GPS coordinates, profile details, or tokens exported.
         return {'runs': sorted({r['id']: r for r in runs}.values(), key=lambda r: r['date'], reverse=True),
-                'wellness': wellness, 'warnings': sorted(set(warnings)),
-                'syncedAt': datetime.now(timezone.utc).isoformat()}
+                'wellness': wellness, 'performance': performance, 'warnings': sorted(set(warnings)),
+                'syncedAt': datetime.now(utc_timezone.utc).isoformat()}

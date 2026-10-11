@@ -27,10 +27,10 @@ def test_sync_persists_snapshot_and_does_not_destroy_on_error(api, monkeypatch):
     token = client.get('/api/session').json()['token']
     headers = {'x-milemark-token': token}
     value = {'runs': [], 'wellness': [], 'syncedAt': '2026-10-15'}
-    monkeypatch.setattr(module.BRIDGE, 'sync', lambda: value)
+    monkeypatch.setattr(module.BRIDGE, 'sync', lambda **kwargs: value)
     assert client.post('/api/garmin/sync', headers=headers).json() == value
     assert client.get('/api/snapshot').json() == value
-    def broken():
+    def broken(**kwargs):
         raise RuntimeError('sensitive-internal-detail')
     monkeypatch.setattr(module.BRIDGE, 'sync', broken)
     response = client.post('/api/garmin/sync', headers=headers)
@@ -50,3 +50,14 @@ def test_mfa_and_login_errors_are_redacted(api, monkeypatch):
     assert 'password-internal' not in response.text
     assert 'test-only-password' not in response.text
     assert client.post('/api/garmin/mfa', headers=headers, json={'code': 'bad'}).status_code == 422
+
+
+def test_sync_uses_browser_timezone_and_rejects_invalid_timezone(api, monkeypatch):
+    client, module = api
+    headers = {'x-milemark-token': client.get('/api/session').json()['token']}
+    from unittest.mock import Mock
+    sync = Mock(return_value={'runs': [], 'wellness': []})
+    monkeypatch.setattr(module.BRIDGE, 'sync', sync)
+    assert client.post('/api/garmin/sync', headers=headers, json={'timezone': 'America/Los_Angeles'}).status_code == 200
+    sync.assert_called_once_with(timezone='America/Los_Angeles')
+    assert client.post('/api/garmin/sync', headers=headers, json={'timezone': 'Invalid/Timezone'}).status_code == 422
