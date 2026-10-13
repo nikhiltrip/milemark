@@ -16,6 +16,7 @@ export interface Run {
   race?: boolean;
 }
 export interface Wellness {
+  steps?: number | null;
   date: string;
   sleepScore?: number | null;
   sleepHours?: number | null;

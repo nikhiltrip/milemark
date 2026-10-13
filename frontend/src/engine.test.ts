@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  dailyRunHistory,
   generatePlan,
   recovery,
   prediction,
@@ -284,4 +285,47 @@ test("imports retain valid wearable performance fields and reject impossible num
   assert.equal(imported.runs[0].avgPowerW, 230);
   assert.equal(imported.performance!.vo2Max, 51);
   assert.equal(imported.performance!.trainingReadiness, null);
+});
+
+test("daily distance sums multiple runs, deduplicates IDs and excludes future days", () => {
+  const run = {
+    id: "a",
+    date: today,
+    name: "Run",
+    distanceKm: 5,
+    durationSec: 1800,
+  };
+  const result = dailyRunHistory(
+    {
+      runs: [
+        run,
+        run,
+        { ...run, id: "b", distanceKm: 3 },
+        { ...run, id: "future", date: shift(today, 1) },
+      ],
+      wellness: [],
+    },
+    today,
+    3,
+  );
+  assert.deepEqual(result.at(-1), { date: today, km: 8, runs: 2 });
+  assert.equal(result[0].km, 0);
+  assert.equal(result.length, 3);
+});
+test("step counts survive import and missing updates", () => {
+  const snapshot = normalizeImport({
+    runs: [],
+    wellness: [{ date: today, steps: 0 }],
+  });
+  assert.equal(snapshot.wellness[0].steps, 0);
+  assert.equal(
+    mergeSnapshots(
+      snapshot,
+      normalizeImport({ runs: [], wellness: [{ date: today, steps: null }] }),
+    ).wellness[0].steps,
+    0,
+  );
+  assert.throws(() =>
+    normalizeImport({ runs: [], wellness: [{ date: today, steps: -1 }] }),
+  );
 });

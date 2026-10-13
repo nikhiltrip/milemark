@@ -32,6 +32,7 @@ import {
   shift,
   generatePlan,
   history,
+  dailyRunHistory,
   recovery,
   prediction,
   trainingBase,
@@ -55,6 +56,7 @@ import type { Snapshot, Settings, Run, Wellness } from "./types";
 import "./styles.css";
 import { upcomingRaces } from "./races";
 import { evidence } from "./evidence";
+import { SignalChart } from "./SignalChart";
 import {
   displayDistance,
   toKilometers,
@@ -109,6 +111,11 @@ function App() {
   const [selectedDay, setSelectedDay] = useState(today);
   const [mobile, setMobile] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [sleepMetric, setSleepMetric] = useState<"score" | "hours">("score");
+  const [hrvMetric, setHrvMetric] = useState<"overnight" | "average">(
+    "overnight",
+  );
+  const [historyDays, setHistoryDays] = useState(14);
   const dialog = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const snapshot = mode === "demo" ? demoSnapshot() : personal;
@@ -894,6 +901,10 @@ function App() {
                     <Moon size={19} />
                   </div>
                   <RecoveryRow
+                    onClick={() => {
+                      setSleepMetric("score");
+                      go("Recovery");
+                    }}
                     label="Sleep"
                     value={
                       sleep?.sleepHours != null
@@ -911,6 +922,10 @@ function App() {
                       .map((w) => w.sleepHours ?? 0)}
                   />
                   <RecoveryRow
+                    onClick={() => {
+                      setHrvMetric("overnight");
+                      go("Recovery");
+                    }}
                     label="Overnight HRV"
                     value={hrv?.hrvMs != null ? `${hrv!.hrvMs} ms` : "—"}
                     detail={
@@ -938,9 +953,22 @@ function App() {
                     className="text-arrow"
                     onClick={() => go("Run journal")}
                   >
-                    All activities <ArrowUpRight size={16} />
+                    All runs <ArrowUpRight size={16} />
                   </button>
                 </div>
+                <SignalChart
+                  label="Daily running distance"
+                  unit={unit}
+                  values={dailyRunHistory(snapshot, today).map((r) => ({
+                    date: r.date,
+                    value: d(r.km),
+                    detail: `${r.runs} ${r.runs === 1 ? "run" : "runs"}`,
+                  }))}
+                />
+                <p className="metric-date">
+                  Daily totals · multiple runs on the same day are added
+                  together.
+                </p>
                 {runTable(4)}
               </section>
             </>
@@ -1000,6 +1028,7 @@ function App() {
                   <b>
                     {d(
                       Math.max(
+                        0,
                         ...plan.weeks.flatMap((w) =>
                           w.sessions
                             .filter((s) => s.kind === "Long run")
@@ -1167,7 +1196,22 @@ function App() {
                   )}
                 </div>
               </section>
-              <section className="panel journal-panel">{runTable()}</section>
+              <section className="panel journal-panel">
+                <h2>Daily running distance</h2>
+                <SignalChart
+                  label="Daily running distance"
+                  unit={unit}
+                  values={dailyRunHistory(snapshot, today).map((r) => ({
+                    date: r.date,
+                    value: d(r.km),
+                    detail: `${r.runs} ${r.runs === 1 ? "run" : "runs"}`,
+                  }))}
+                />
+                <p className="metric-date">
+                  Last 28 days · runs only · multiple runs per day are combined.
+                </p>
+                {runTable()}
+              </section>
             </>
           )}
 
@@ -1190,6 +1234,25 @@ function App() {
                 </div>
                 <Heart size={62} strokeWidth={1} />
               </section>
+              <div className="journal-toolbar">
+                <span>Explore your recovery history</span>
+                <div
+                  className="segmented"
+                  role="group"
+                  aria-label="Recovery history range"
+                >
+                  {[14, 28].map((n) => (
+                    <button
+                      key={n}
+                      aria-pressed={historyDays === n}
+                      className={historyDays === n ? "selected" : ""}
+                      onClick={() => setHistoryDays(n)}
+                    >
+                      {n} days
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="recovery-grid">
                 <section className="panel">
                   <span className="eyebrow">SLEEP</span>
@@ -1206,12 +1269,38 @@ function App() {
                       ? `Sleep score: ${sleep!.sleepScore} / 100`
                       : "No sleep score available."}
                   </p>
+                  <div
+                    className="segmented chart-selector"
+                    role="group"
+                    aria-label="Sleep history metric"
+                  >
+                    <button
+                      aria-pressed={sleepMetric === "score"}
+                      className={sleepMetric === "score" ? "selected" : ""}
+                      onClick={() => setSleepMetric("score")}
+                    >
+                      Sleep score
+                    </button>
+                    <button
+                      aria-pressed={sleepMetric === "hours"}
+                      className={sleepMetric === "hours" ? "selected" : ""}
+                      onClick={() => setSleepMetric("hours")}
+                    >
+                      Sleep hours
+                    </button>
+                  </div>
                   <SignalChart
+                    label="Sleep history"
                     values={wellness
-                      .slice(0, 14)
+                      .slice(0, historyDays)
                       .reverse()
-                      .map((w) => ({ date: w.date, value: w.sleepHours }))}
-                    unit="hours"
+                      .map((w) => ({
+                        date: w.date,
+                        value:
+                          sleepMetric === "score" ? w.sleepScore : w.sleepHours,
+                      }))}
+                    unit={sleepMetric === "score" ? "/100" : "hours"}
+                    ceiling={sleepMetric === "score" ? 100 : undefined}
                   />
                 </section>
                 <section className="panel">
@@ -1236,15 +1325,65 @@ function App() {
                       ? `Your personal baseline: ${hrv!.hrvBaselineLow}–${hrv!.hrvBaselineHigh ?? "…"} ms`
                       : "Sync or add your own baseline to put HRV in context."}
                   </p>
+                  <div
+                    className="segmented chart-selector"
+                    role="group"
+                    aria-label="HRV history metric"
+                  >
+                    <button
+                      aria-pressed={hrvMetric === "overnight"}
+                      className={hrvMetric === "overnight" ? "selected" : ""}
+                      onClick={() => setHrvMetric("overnight")}
+                    >
+                      Overnight HRV
+                    </button>
+                    <button
+                      aria-pressed={hrvMetric === "average"}
+                      className={hrvMetric === "average" ? "selected" : ""}
+                      onClick={() => setHrvMetric("average")}
+                    >
+                      7-day average
+                    </button>
+                  </div>
                   <SignalChart
+                    label="HRV history"
                     values={wellness
-                      .slice(0, 14)
+                      .slice(0, historyDays)
                       .reverse()
-                      .map((w) => ({ date: w.date, value: w.hrvMs }))}
+                      .map((w) => ({
+                        date: w.date,
+                        value:
+                          hrvMetric === "overnight" ? w.hrvMs : w.hrv7DayMs,
+                      }))}
                     unit="ms"
                   />
                 </section>
               </div>
+              <section className="panel">
+                <span className="eyebrow">DAILY STEPS</span>
+                <div className="large-number">
+                  {wellness
+                    .find((w) => w.date === today)
+                    ?.steps?.toLocaleString() ?? "—"}{" "}
+                  <span>today</span>
+                </div>
+                <p className="metric-date">
+                  All-day Garmin steps, including walking. Today's total is
+                  partial until the day ends. Updated on sync; steps do not add
+                  running mileage or change your plan.
+                </p>
+                <SignalChart
+                  label="Daily step history"
+                  unit="steps"
+                  values={Array.from({ length: historyDays }, (_, i) => {
+                    const date = shift(today, i - historyDays + 1);
+                    return {
+                      date,
+                      value: wellness.find((w) => w.date === date)?.steps,
+                    };
+                  })}
+                />
+              </section>
               <section className="panel explanation">
                 <h2>A signal, not a verdict.</h2>
                 <p>
@@ -2246,14 +2385,21 @@ function RecoveryRow({
   value,
   detail,
   bars,
+  onClick,
 }: {
   label: string;
   value: string;
   detail: string;
   bars: number[];
+  onClick: () => void;
 }) {
   return (
-    <div className="recovery-row">
+    <button
+      type="button"
+      className="recovery-row"
+      aria-label={`View ${label.toLowerCase()} history`}
+      onClick={onClick}
+    >
       <div>
         <span>{label}</span>
         <strong>{value}</strong>
@@ -2270,44 +2416,7 @@ function RecoveryRow({
           />
         ))}
       </div>
-    </div>
-  );
-}
-function SignalChart({
-  values,
-  unit,
-}: {
-  values: { date: string; value?: number | null }[];
-  unit: string;
-}) {
-  const max = Math.max(1, ...values.map((v) => v.value ?? 0)) * 1.15;
-  return (
-    <div
-      className="signal-chart"
-      role="img"
-      aria-label={
-        values
-          .map((v) => `${v.date}: ${v.value ?? "missing"} ${unit}`)
-          .join(", ") || "No recovery data yet"
-      }
-    >
-      {values.length ? (
-        values.map((v) => (
-          <div key={v.date}>
-            <div
-              style={{
-                height: v.value != null ? `${(v.value / max) * 90}px` : "2px",
-                opacity: v.value == null ? 0.2 : 1,
-              }}
-              title={`${v.date}: ${v.value ?? "missing"} ${unit}`}
-            />
-            <small>{day(v.date).getDate()}</small>
-          </div>
-        ))
-      ) : (
-        <p>Your recovery history will appear here.</p>
-      )}
-    </div>
+    </button>
   );
 }
 

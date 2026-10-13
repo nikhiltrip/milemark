@@ -61,3 +61,15 @@ def test_sync_uses_browser_timezone_and_rejects_invalid_timezone(api, monkeypatc
     assert client.post('/api/garmin/sync', headers=headers, json={'timezone': 'America/Los_Angeles'}).status_code == 200
     sync.assert_called_once_with(timezone='America/Los_Angeles')
     assert client.post('/api/garmin/sync', headers=headers, json={'timezone': 'Invalid/Timezone'}).status_code == 422
+
+
+def test_sync_retains_daily_steps_after_window_moves_and_null_updates(api, monkeypatch):
+    client, module = api
+    headers = {'x-milemark-token': client.get('/api/session').json()['token']}
+    monkeypatch.setattr(module.BRIDGE, 'sync', lambda **kwargs: {'runs': [], 'wellness': [{'date': '2026-09-01', 'steps': 9000}, {'date': '2026-10-15', 'steps': 500}]})
+    assert client.post('/api/garmin/sync', headers=headers).status_code == 200
+    monkeypatch.setattr(module.BRIDGE, 'sync', lambda **kwargs: {'runs': [], 'wellness': [{'date': '2026-10-15', 'steps': None}, {'date': '2026-10-16', 'steps': 0}]})
+    records = {w['date']: w for w in client.post('/api/garmin/sync', headers=headers).json()['wellness']}
+    assert records['2026-09-01']['steps'] == 9000
+    assert records['2026-10-15']['steps'] == 500
+    assert records['2026-10-16']['steps'] == 0

@@ -30,6 +30,7 @@ def test_sync_is_read_only_bounded_and_handles_missing_hrv(tmp_path):
     bridge.client.get_activities.return_value = [{'activityId': 1, 'activityName': 'Morning', 'activityType': {'typeKey': 'running'},
                                                  'distance': 5000, 'duration': 1800, 'startTimeLocal': '2026-10-14 06:00:00'}]
     bridge.client.get_sleep_data.return_value = {}
+    bridge.client.get_daily_steps.return_value = [{'calendarDate': '2026-10-15', 'totalSteps': 12345}, {'calendarDate': '2026-10-14', 'totalSteps': 0}]
     bridge.client.get_sleep_daily.return_value = []
     bridge.client.get_hrv_data_range.side_effect = RuntimeError('device not supported')
     bridge.client.get_max_metrics_range.return_value = []
@@ -40,7 +41,10 @@ def test_sync_is_read_only_bounded_and_handles_missing_hrv(tmp_path):
     assert len(value['wellness']) == 28
     assert len(value['warnings']) == 1
     assert value['wellness'][0]['hrvMs'] is None
-    assert set(call[0] for call in bridge.client.method_calls) == {'get_activities', 'get_sleep_data', 'get_sleep_daily', 'get_hrv_data_range', 'get_max_metrics_range', 'get_training_readiness', 'get_race_predictions'}
+    assert value['wellness'][0]['steps'] == 12345
+    assert value['wellness'][1]['steps'] == 0
+    assert value['wellness'][2]['steps'] is None
+    assert set(call[0] for call in bridge.client.method_calls) == {'get_daily_steps', 'get_activities', 'get_sleep_data', 'get_sleep_daily', 'get_hrv_data_range', 'get_max_metrics_range', 'get_training_readiness', 'get_race_predictions'}
 
 
 def test_login_and_mfa_follow_installed_client_contract(tmp_path, monkeypatch):
@@ -86,3 +90,11 @@ def test_activity_cadence_is_not_doubled_and_unavailable_fields_stay_null():
     assert value['maxHr'] == 180
     assert value['vo2Max'] == 52
     assert value['groundContactMs'] is None
+
+
+def test_all_non_running_sports_are_excluded():
+    row = {'activityId': 1, 'startTimeLocal': '2026-10-15 07:00:00', 'distance': 5000, 'duration': 1800}
+    for kind in ['cycling', 'road_biking', 'indoor_cycling', 'swimming', 'lap_swimming', 'open_water_swimming', 'walking', 'hiking', 'multisport', 'fitness_equipment']:
+        assert normalize_run({**row, 'activityType': {'typeKey': kind}}) is None
+    for kind in ['running', 'trail_running', 'treadmill_running', 'track_running', 'indoor_running', 'virtual_run']:
+        assert normalize_run({**row, 'activityType': {'typeKey': kind}}) is not None

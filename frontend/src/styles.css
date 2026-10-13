@@ -1993,6 +1993,304 @@ dialog::backdrop {
 .units button {
   min-width: 28px;
 }
+/* Instrument-panel styling stays separate from data and training behavior. */
+:root {
+  --serif: "DM Sans", sans-serif;
+}
+h1 {
+  font-weight: 650;
+  font-size: 42px;
+  letter-spacing: -1.8px;
+}
+.hero h2 {
+  font-weight: 550;
+  font-size: 42px;
+  letter-spacing: -1.5px;
+}
+.hero h2 em {
+  font-style: normal;
+  font-weight: 650;
+}
+.hero {
+  background: radial-gradient(ellipse at 85% 30%, #263344 0, #1b232e 58%);
+}
+.track-art text {
+  font-family: "DM Sans", sans-serif;
+  font-weight: 600;
+  font-size: 42px;
+  letter-spacing: -2px;
+}
+.track-art .track-caption {
+  font-size: 7px;
+  letter-spacing: 1px;
+  font-weight: 400;
+}
+.sidebar {
+  background: #17202a;
+  border-right-color: #2b3746;
+  overflow-y: auto;
+  color: #dce4ed;
+  padding-top: 25px;
+}
+.sidebar .brand {
+  color: #f5f7fa;
+}
+.sidebar .side-label {
+  color: #8294ab;
+  margin-top: 32px;
+  margin-bottom: 12px;
+}
+.sidebar nav {
+  flex-shrink: 0;
+}
+.sidebar nav button {
+  color: #a6b5c6;
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+.sidebar nav button.active {
+  background: #392b24;
+  color: #ff864f;
+}
+.sidebar .nav-dot {
+  background: #fc4c02;
+}
+.sidebar .side-race {
+  border-top-color: #334051;
+  margin-top: 24px;
+}
+.sidebar .side-race > span,
+.sidebar .side-race p,
+.sidebar .side-race div > span {
+  color: #8c9fb6;
+}
+.sidebar .side-race button {
+  color: #c7d4e4;
+}
+.sidebar .side-bottom > button {
+  color: #a6b5c6;
+}
+.sidebar .side-bottom {
+  padding-top: 16px;
+}
+.sidebar .athlete {
+  border-top-color: #334051;
+  padding-top: 17px;
+  padding-bottom: 17px;
+}
+.sidebar .avatar {
+  background: #2a394a;
+  color: #dae3ef;
+}
+.sidebar .athlete small {
+  color: #8195ad;
+}
+.panel,
+.workout-card,
+.hero,
+.plan-summary,
+.peak-summary > span {
+  border-radius: 7px;
+}
+.panel {
+  box-shadow: 0 1px 2px #1b2c4404;
+}
+.metric-value,
+.large-number,
+.workout-stats b,
+.peak-summary b,
+.prediction-grid strong,
+.chart-readout strong,
+.run-row > b,
+.performance-table td {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+.large-number,
+.metric-value,
+.peak-summary b {
+  font-weight: 550;
+}
+.eyebrow,
+.metric-label,
+.table-label {
+  letter-spacing: 1.2px;
+}
+.page-heading .eyebrow {
+  color: #ca511e;
+}
+.panel-heading h2 {
+  font-weight: 600;
+}
+.explanation h2,
+.evidence-card h2,
+.plan-summary h2,
+.recovery-hero h2 {
+  font-weight: 600;
+  letter-spacing: -0.8px;
+}
+.segmented {
+  border-radius: 5px;
+}
+.segmented button.selected {
+  box-shadow: 0 1px 4px #18263515;
+}
+.day-card.chosen {
+  background: #fff3eb;
+}
+.chart-readout {
+  border-bottom: 1px solid #edf0f4;
+  margin-bottom: 8px;
+}
+.signal-bars {
+  padding-top: 30px;
+  height: 145px;
+}
+.chart-hover-tooltip {
+  box-shadow: 0 6px 20px #14243a25;
+}
+.section-top .eyebrow {
+  color: #a35c34;
+}
+@media (max-width: 760px) {
+  h1 {
+    font-size: 34px;
+    letter-spacing: -1.3px;
+  }
+  .hero h2 {
+    font-size: 33px;
+    letter-spacing: -1px;
+  }
+  .sidebar .side-race {
+    margin-top: 18px;
+  }
+  .sidebar nav button {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .sidebar.open .side-label {
+    margin-top: 24px;
+  }
+}
+button.recovery-row {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #e8ebef;
+  color: inherit;
+}
+button.recovery-row:hover {
+  background: #f6f8fb;
+}
+.chart-selector {
+  width: fit-content;
+  margin: 20px 0 0;
+}
+.chart-readout {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0 12px;
+  font-size: 11px;
+  color: #718398;
+}
+.chart-readout strong {
+  font-size: 16px;
+  font-weight: 550;
+  color: #d4450b;
+}
+.signal-bars {
+  display: flex;
+  gap: 5px;
+  align-items: flex-end;
+  position: relative;
+  height: 133px;
+  padding-top: 18px;
+}
+.signal-bars button {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: center;
+  color: #718398;
+  outline-offset: 2px;
+}
+.bar-space {
+  height: 92px;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.bar-fill {
+  display: block;
+  background: #ffad85;
+  border-radius: 3px 3px 0 0;
+  width: 100%;
+  max-width: 24px;
+  min-height: 2px;
+  transition: background 0.15s;
+}
+.signal-bars button.highlighted .bar-fill {
+  background: #fc4c02;
+}
+.signal-bars button.missing .bar-fill {
+  background: #cbd4df;
+}
+.signal-bars small {
+  font-size: 8px;
+  display: block;
+  margin-top: 8px;
+}
+.chart-hover-tooltip {
+  pointer-events: none;
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #202832;
+  color: #fff;
+  border-radius: 4px;
+  padding: 8px 11px;
+  box-shadow: 0 3px 12px #15243220;
+  font-size: 10px;
+  min-width: 115px;
+  z-index: 5;
+  display: grid;
+  gap: 5px;
+  white-space: nowrap;
+}
+.signal-bars button:first-child .chart-hover-tooltip {
+  left: 0;
+  transform: none;
+}
+.signal-bars button:last-child .chart-hover-tooltip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.chart-hover-tooltip b {
+  font-size: 9px;
+  font-weight: 500;
+  color: #bcc8d8;
+}
+.chart-hint {
+  font-size: 9px !important;
+  color: #8595a8 !important;
+  line-height: 1.6;
+  margin: 14px 0 0;
+}
+.signal-chart-shell {
+  min-width: 0;
+}
+.signal-bars button:focus-visible {
+  outline: 2px solid #fc4c02;
+}
 .peak-summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

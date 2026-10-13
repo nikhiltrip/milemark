@@ -71,7 +71,7 @@ def normalize_wellness(day, sleep, hrv):
 
 def normalize_performance(metrics, readiness, predictions, runs):
     rows = metrics if isinstance(metrics, list) else []
-    vo2 = [row.get('generic') for row in rows if isinstance(row, dict) and isinstance(row.get('generic'), dict)]
+    vo2 = [row.get('generic') for row in rows if isinstance(row, dict) and isinstance(row.get('generic'), dict) and row.get('generic', {}).get('sport', 'RUNNING').upper() == 'RUNNING']
     vo2 = sorted((row for row in vo2 if number(row.get('vo2MaxPreciseValue') or row.get('vo2MaxValue'), 10, 100) is not None), key=lambda row: row.get('calendarDate', ''), reverse=True)
     from_run = next((r for r in sorted(runs, key=lambda r: r['date'], reverse=True) if r.get('vo2Max') is not None), None)
     value = vo2[0] if vo2 else None
@@ -167,6 +167,8 @@ class GarminBridge:
                 return None
         end = today.isoformat()
         start = (today - timedelta(days=27)).isoformat()
+        step_rows = optional('get_daily_steps', start, end)
+        steps = {row.get('calendarDate'): number(row.get('totalSteps'), 0, 200000) for row in step_rows if isinstance(row, dict)} if isinstance(step_rows, list) else {}
         sleep_rows = optional('get_sleep_daily', start, end)
         hrv_range = optional('get_hrv_data_range', start, end)
         sleeps = {row.get('calendarDate'): row for row in sleep_rows if isinstance(row, dict)} if isinstance(sleep_rows, list) else {}
@@ -184,6 +186,7 @@ class GarminBridge:
                 if isinstance(detail, dict):
                     extra = normalize_wellness(day, detail, hrvs.get(day, {}))
                     normalized = {key: extra.get(key) if extra.get(key) is not None else value for key, value in normalized.items()}
+            normalized['steps'] = steps.get(day)
             wellness.append(normalized)
         metrics = optional('get_max_metrics_range', (today - timedelta(days=90)).isoformat(), end)
         readiness = optional('get_training_readiness', end)

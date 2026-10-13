@@ -158,6 +158,24 @@ export function history(snapshot: Snapshot, today = iso(new Date())) {
     };
   });
 }
+export function dailyRunHistory(
+  snapshot: Snapshot,
+  today = iso(new Date()),
+  days = 28,
+) {
+  const totals = new Map<string, { km: number; runs: number }>();
+  for (const run of new Map(snapshot.runs.map((r) => [r.id, r])).values()) {
+    const previous = totals.get(run.date) || { km: 0, runs: 0 };
+    totals.set(run.date, {
+      km: previous.km + run.distanceKm,
+      runs: previous.runs + 1,
+    });
+  }
+  return Array.from({ length: days }, (_, i) => {
+    const date = shift(today, i - days + 1);
+    return { date, ...(totals.get(date) || { km: 0, runs: 0 }) };
+  });
+}
 export function trainingBase(snapshot: Snapshot, today = iso(new Date())) {
   const completed = history(snapshot, today).slice(3, 7);
   const average = round(completed.reduce((sum, w) => sum + w.km, 0) / 4);

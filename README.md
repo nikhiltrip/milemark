@@ -97,3 +97,7 @@ docs/              Architecture and verification notes
 ```
 
 Built as an independent personal project. Not affiliated with Garmin, Strava, or any race organizer. Font licenses are included under `public/fonts/`.
+
+Daily history: Recovery includes Garmin daily step totals and inspectable sleep/HRV charts. Run journal and Overview show daily running distance; multiple runs on the same date are summed once per activity ID. Hover, tap, or keyboard-focus a bar for its dated reading. All-day steps include walking and never increase running mileage or alter the training plan. Sync backfills the latest 28 days and retains previously imported daily health records locally; it does not run while the app is closed.
+
+Only Garmin running activity types enter the run journal and training calculations. Swimming, cycling, walking, hiking, and combined multisport summaries are excluded. Garmin recovery/readiness is displayed as returned by Garmin and can reflect overall activity; Milemark's own running-mileage calculations use runs only.

@@ -120,6 +120,13 @@ def sync(body: SyncOptions | None = None):
         except (ZoneInfoNotFoundError, ValueError):
             raise HTTPException(422, 'Choose a valid timezone.') from None
         value = BRIDGE.sync(timezone=timezone)
+        # Retain daily history as the rolling Garmin window advances. New nulls
+        # must not erase an earlier reading; zero steps is a valid reading.
+        records = {w['date']: w for w in read_snapshot().get('wellness', [])}
+        for record in value.get('wellness', []):
+            previous = records.get(record['date'], {})
+            records[record['date']] = {**previous, **{k: v for k, v in record.items() if v is not None}}
+        value = {**value, 'wellness': sorted(records.values(), key=lambda w: w['date'], reverse=True)}
         with db() as conn:
             conn.execute('INSERT OR REPLACE INTO snapshot VALUES(1, ?)', (json.dumps(value, allow_nan=False),))
         return value

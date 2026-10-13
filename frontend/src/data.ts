@@ -70,6 +70,7 @@ export function demoSnapshot(): Snapshot {
     },
     wellness: Array.from({ length: 28 }, (_, i) => ({
       date: shift(today, -i),
+      steps: 6800 + (i % 6) * 1350,
       restingHr: 49 + (i % 3),
       sleepScore: 82 + (i % 5) - 4,
       sleepHours: 7.4 + (i % 4) * 0.15,
@@ -156,6 +157,7 @@ export function normalizeImport(raw: unknown): Snapshot {
       ["hrvBaselineLow", 500],
       ["hrvBaselineHigh", 500],
       ["restingHr", 250],
+      ["steps", 200000],
     ] as const)
       if (w[key] != null && !num(w[key], 0, max))
         throw new Error(`Recovery record ${i + 1}: invalid ${key}.`);
@@ -168,6 +170,7 @@ export function normalizeImport(raw: unknown): Snapshot {
       hrvBaselineLow: w.hrvBaselineLow ?? null,
       hrvBaselineHigh: w.hrvBaselineHigh ?? null,
       restingHr: w.restingHr ?? null,
+      steps: w.steps ?? null,
     };
   });
   return {
