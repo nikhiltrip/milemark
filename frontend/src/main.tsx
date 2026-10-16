@@ -2324,62 +2324,20 @@ function MileageChart({
   unit: Unit;
   values: { start: string; km: number }[];
 }) {
-  const max = Math.max(20, ...values.map((x) => x.km)) * 1.2;
-  const width = 640,
-    height = 175;
-  const gap = width / values.length;
   return (
-    <div className="mileage-chart">
-      <div className="chart-axis">
-        {[1, 0.5, 0].map((n) => (
-          <span key={n}>{Math.round(max * n)}</span>
-        ))}
-      </div>
-      <div className="chart-plot">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label={values
-            .map((x) => `${dateLabel(x.start)}: ${x.km.toFixed(1)} ${unit}`)
-            .join(", ")}
-        >
-          {[0, 0.5, 1].map((n) => (
-            <line
-              key={n}
-              x1="0"
-              x2={width}
-              y1={n * (height - 15)}
-              y2={n * (height - 15)}
-              stroke="#e5e9ee"
-              strokeDasharray="3 5"
-            />
-          ))}
-          {values.map((x, i) => (
-            <g key={x.start}>
-              <rect
-                x={i * gap + gap * 0.23}
-                y={height - 15 - (x.km / max) * (height - 15)}
-                width={gap * 0.54}
-                height={(x.km / max) * (height - 15)}
-                rx="3"
-                fill={i === values.length - 1 ? "#ffbd9c" : "#fc4c02"}
-              >
-                <title>
-                  {dateLabel(x.start)} · {x.km.toFixed(1)} {unit}
-                </title>
-              </rect>
-            </g>
-          ))}
-        </svg>
-        <div className="chart-dates">
-          {values.map((x) => (
-            <span key={x.start}>{dateLabel(x.start)}</span>
-          ))}
-        </div>
-      </div>
-    </div>
+    <SignalChart
+      label="Weekly running distance"
+      unit={unit}
+      period="week"
+      values={values.map((w) => ({
+        date: w.start,
+        value: w.km,
+        detail: "week total",
+      }))}
+    />
   );
 }
+
 function RecoveryRow({
   label,
   value,

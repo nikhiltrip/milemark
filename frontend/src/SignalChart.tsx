@@ -5,11 +5,13 @@ export function SignalChart({
   unit,
   label,
   ceiling,
+  period = "day",
 }: {
   values: { date: string; value?: number | null; detail?: string }[];
   unit: string;
   label: string;
   ceiling?: number;
+  period?: "day" | "week";
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -20,6 +22,7 @@ export function SignalChart({
     values.at(-1);
   const max = ceiling ?? Math.max(1, ...values.map((v) => v.value ?? 0)) * 1.15;
   const date = (s: string) =>
+    (period === "week" ? "Week of " : "") +
     day(s).toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
@@ -65,7 +68,14 @@ export function SignalChart({
                 }}
               />
             </span>
-            <small>{day(v.date).getDate()}</small>
+            <small>
+              {period === "week"
+                ? day(v.date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })
+                : day(v.date).getDate()}
+            </small>
             {hovered === v.date && (
               <span
                 id={`${id}-tooltip`}
@@ -80,7 +90,8 @@ export function SignalChart({
         ))}
       </div>
       <p className="chart-hint">
-        Hover, tap, or focus a day to inspect its reading. Gaps mean no data.
+        Hover, tap, or focus a {period} to inspect its reading. Gaps mean no
+        data.
       </p>
     </div>
   );
