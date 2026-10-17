@@ -139,6 +139,11 @@ function App() {
     (w) => w.sleepScore != null || w.sleepHours != null,
   );
   const hrv = available.find((w) => w.hrvMs != null || w.hrv7DayMs != null);
+  const todaysWellness = available.find((w) => w.date === today);
+  const needsGarminRecoverySync =
+    mode === "personal" &&
+    connected &&
+    (todaysWellness?.sleepScore == null || todaysWellness?.hrvMs == null);
   const signalDay = available.find(
     (w) => w.sleepScore != null || w.sleepHours != null || w.hrv7DayMs != null,
   );
@@ -660,6 +665,15 @@ function App() {
               ))}
             </details>
           ) : null}
+          {needsGarminRecoverySync &&
+            (view === "Overview" || view === "Recovery") && (
+              <div className="callout" role="status">
+                <strong>Missing today’s sleep score or overnight HRV?</strong>{" "}
+                Sync your watch in Garmin Connect first, then open Connections
+                in Milemark and choose Sync my Garmin. Readings can only appear
+                here once Garmin Connect has them.
+              </div>
+            )}
           {notice && (
             <div className="toast" role="status">
               <Check size={16} />
