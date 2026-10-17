@@ -24,6 +24,18 @@ Requirements: Node.js 20.19+ or 22.12+, npm, and Python 3.12+.
 
 On macOS, double-click **`start.command`** (or run `./start.command` in Terminal). It prepares dependencies, builds the frontend, opens your browser, and starts the service on `http://127.0.0.1:8000`. Keep its Terminal window open; press Control-C to stop.
 
+### Run from VS Code
+
+Open the extracted project folder in VS Code, choose **Terminal → New Terminal**, and run this from the folder containing `start.command`:
+
+```sh
+bash start.command
+```
+
+This runs the same setup and local server as the launcher. If Finder displays an Apple verification warning for the downloaded launcher, you can inspect `start.command` in VS Code before running it. Keep the terminal open while using Milemark; press Control-C to stop it.
+
+### Manual setup
+
 Or set it up manually:
 
 ```sh
