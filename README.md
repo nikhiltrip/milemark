@@ -48,6 +48,14 @@ PYTHONPATH=backend .venv/bin/python -m uvicorn milemark.app:app --host 127.0.0.1
 
 Open `http://127.0.0.1:8000`. Select **Connect Garmin**, sign in locally, enter Garmin's verification code if requested, then choose **Sync my Garmin**. Sync can take a few minutes. To build your plan from imported training, open **Edit your goal → Use my last 4 complete weeks** and review the numbers before saving.
 
+### Missing today's sleep score or HRV?
+
+1. Sync your watch in **Garmin Connect** and confirm today's readings appear there.
+2. In Milemark, open **Connections → Sync my Garmin** and wait for the import to finish.
+3. Check the **Latest available** date on Recovery. If Garmin Connect has no reading for today, Milemark cannot import one yet.
+
+Opening or refreshing Milemark loads its saved import; it does not start a new Garmin sync. Overview and Recovery show a reminder when Garmin is connected but today's sleep score or overnight HRV is missing. Missing readings remain unavailable rather than being filled with sample values.
+
 No Garmin? Choose **Start my training**, select your race and current training volume, then log runs manually. Goal time and mileage defaults are editable examples, not measurements of your fitness.
 
 ### Development
