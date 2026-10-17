@@ -2,7 +2,7 @@
 
 **The long game.** A personal marathon training dashboard built with React, TypeScript, and Python. A bright orange and charcoal interface brings your training plan, run journal, and recovery history together.
 
-![Milemark dashboard](docs/dashboard.jpg)
+![Milemark dashboard with inspectable weekly mileage and daily running history](docs/dashboard.jpg)
 
 ## What works
 
