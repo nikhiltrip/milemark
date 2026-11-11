@@ -2443,3 +2443,10 @@ button.recovery-row:hover {
     grid-template-columns: 1fr;
   }
 }
+.adaptive-plan { margin-bottom: 24px; }
+.adaptive-label { font-size: 12px; font-weight: 700; color: var(--orange, #bc4b19); }
+.adaptive-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.adaptive-controls p { flex: 1 1 240px; }
+.adaptive-controls .btn { white-space: normal; }
+.session-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.session-actions small, .day-card small { font-size: 11px; }

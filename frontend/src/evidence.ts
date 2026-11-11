@@ -1,5 +1,14 @@
 export const evidence = [
   {
+    title: "Sleep and training decisions",
+    type: "Narrative review and expert consensus · athletes",
+    finding:
+      "Walsh et al. (2021) recommend an individualized approach to athlete sleep. Effects of partial sleep restriction vary; a watch score alone cannot determine readiness.",
+    application:
+      "Today’s recorded sleep can shorten an uncompleted run. Repeated flags reserve easy days. The 20%/30% cuts and two-day buffer are transparent app heuristics, not thresholds validated by this review.",
+    url: "https://pubmed.ncbi.nlm.nih.gov/33144349/",
+  },
+  {
     title: "Tapering before competition",
     type: "Meta-analysis · competitive athletes",
     finding:

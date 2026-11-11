@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import {
   day,
+  iso,
   monday,
   progress,
   shift,
@@ -45,14 +46,14 @@ import {
   defaultSettings,
   demoSettings,
   demoSnapshot,
-  today,
   readStored,
   saveStored,
   normalizeImport,
   mergeSnapshots,
   download,
 } from "./data";
-import type { Snapshot, Settings, Run, Wellness } from "./types";
+import type { Snapshot, Settings, Run, Wellness, PlanTracking } from "./types";
+import { adaptivePlan, normalizeTracking } from "./adaptation";
 import "./styles.css";
 import { upcomingRaces } from "./races";
 import { evidence } from "./evidence";
@@ -71,6 +72,22 @@ const dateLabel = (
   opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" },
 ) => day(date).toLocaleDateString("en-US", opts);
 function App() {
+  const [today, setToday] = useState(() => iso(new Date()));
+  const [tracking, setTracking] = useState<PlanTracking>(() =>
+    normalizeTracking(readStored("milemark-plan-tracking-v1", null)),
+  );
+  useEffect(() => {
+    const updateDate = () => setToday(iso(new Date()));
+    const timer = setInterval(updateDate, 60_000);
+    window.addEventListener("focus", updateDate);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", updateDate);
+    };
+  }, []);
+  useEffect(() => {
+    saveStored("milemark-plan-tracking-v1", tracking);
+  }, [tracking]);
   const [unit, setUnit] = useState<Unit>(() =>
     readStored<Unit>("milemark-unit-v1", "mi") === "km" ? "km" : "mi",
   );
@@ -80,7 +97,14 @@ function App() {
   useEffect(() => {
     saveStored("milemark-unit-v1", unit);
   }, [unit]);
-  const [mode, setMode] = useState<"demo" | "personal">("demo");
+  const [mode, setMode] = useState<"demo" | "personal">(() =>
+    readStored<string>("milemark-mode-v1", "demo") === "personal"
+      ? "personal"
+      : "demo",
+  );
+  useEffect(() => {
+    saveStored("milemark-mode-v1", mode);
+  }, [mode]);
   const [personal, setPersonal] = useState<Snapshot>(() => {
     try {
       return normalizeImport(readStored("milemark-data-v1", EMPTY));
@@ -120,7 +144,12 @@ function App() {
   const opener = useRef<HTMLElement | null>(null);
   const snapshot = mode === "demo" ? demoSnapshot() : personal;
   const config = mode === "demo" ? demoSettings : settings;
-  const plan = generatePlan(config);
+  const plan = adaptivePlan(
+    config,
+    snapshot,
+    today,
+    mode === "personal" ? tracking : { missedDates: [] },
+  );
   const currentWeek = (s: Settings) =>
     Math.max(
       0,
@@ -163,14 +192,9 @@ function App() {
     week.sessions.find((s) => s.date === selectedDay) ||
     week.sessions.find((s) => s.date === today) ||
     week.sessions[0];
-  const adjust =
-    session.date === today &&
-    signals.factor < 1 &&
-    session.kind !== "Race" &&
-    session.km > 0;
-  const todayKm = adjust
-    ? Math.round(session.km * signals.factor * 10) / 10
-    : session.km;
+  const adjust = !!session.adjustments?.length && session.km > 0;
+  const todayKm = session.km;
+  const sessionHasRun = snapshot.runs.some((r) => r.date === session.date);
   const daysUntil = Math.ceil(
     (day(config.raceDate).getTime() - day(today).getTime()) / 86400000,
   );
@@ -299,6 +323,7 @@ function App() {
       return;
     }
     setSettings(value);
+    setTracking({ missedDates: [] });
     setMode("personal");
     setWeekIndex(0);
     setModal(null);
@@ -372,7 +397,9 @@ function App() {
     try {
       if (file.size > 5_000_000)
         throw new Error("Choose a JSON export under 5 MB.");
-      const value = normalizeImport(JSON.parse(await file.text()));
+      const raw = JSON.parse(await file.text());
+      const value = normalizeImport(raw);
+      setTracking(normalizeTracking(raw.planTracking));
       setPersonal(value);
       setMode("personal");
       setModal(null);
@@ -1021,6 +1048,55 @@ function App() {
                   </button>
                 </div>
               </section>
+              <section
+                className="panel adaptive-plan"
+                aria-label="Automatic plan adjustments"
+              >
+                <div className="panel-heading">
+                  <div>
+                    <span className="eyebrow">ADAPTS TO YOUR JOURNAL</span>
+                    <h2>Your adjusted schedule.</h2>
+                  </div>
+                  <span className="adaptive-label">
+                    Automatic adjustments on
+                  </span>
+                </div>
+                <p>
+                  New recovery check-ins and Garmin imports update the schedule
+                  and calendar export. Missed mileage is never added to another
+                  day.
+                </p>
+                {plan.messages.map((message) => (
+                  <p className="callout" key={message}>
+                    {message}
+                  </p>
+                ))}
+                {mode === "personal" && (
+                  <div className="adaptive-controls">
+                    <p className="fineprint">
+                      {plan.confirmedThrough
+                        ? `Run history confirmed through ${dateLabel(plan.confirmedThrough)}. `
+                        : "No confirmed run-history coverage yet. "}
+                      An unsynced or incomplete journal does not prove you
+                      missed a run.
+                    </p>
+                    <button
+                      className="btn"
+                      onClick={() => {
+                        setTracking((previous) => ({
+                          ...previous,
+                          confirmedThrough: shift(today, -1),
+                        }));
+                        setNotice(
+                          "Journal confirmed through yesterday. Missing scheduled runs now adjust your plan.",
+                        );
+                      }}
+                    >
+                      I've logged all runs through yesterday
+                    </button>
+                  </div>
+                )}
+              </section>
               <div className="peak-summary">
                 <span>
                   Starting week{" "}
@@ -1108,7 +1184,13 @@ function App() {
                       ) : (
                         <Footprints size={22} />
                       )}
-                      <strong>{s.kind}</strong>
+                      <strong>
+                        {s.status === "missed" ? "Missed" : s.kind}
+                      </strong>
+                      {s.status === "completed" && <small>Recorded</small>}
+                      {!!s.adjustments?.length && s.status !== "missed" && (
+                        <small>Adjusted</small>
+                      )}
                       <em>
                         {s.km
                           ? d(s.km).toFixed(1) + " " + unit
@@ -1130,16 +1212,44 @@ function App() {
                       {adjust ? "Lighter option" : session.kind}
                       {todayKm > 0 ? ` · ${d(todayKm).toFixed(1)} ${unit}` : ""}
                     </h3>
-                    <p>
-                      {adjust
-                        ? signals.reasons.join(". ") +
-                          ". Keep today comfortable."
-                        : session.note}
-                    </p>
+                    <p>{session.note}</p>
                   </div>
-                  <span>
-                    {d(week.km).toFixed(1)} {unit} scheduled this week
-                  </span>
+                  <div className="session-actions">
+                    <span>
+                      {d(week.km).toFixed(1)} {unit} scheduled this week
+                    </span>
+                    {!!session.adjustments?.length && (
+                      <small>
+                        Originally {session.plannedKind} ·{" "}
+                        {d(session.plannedKm || 0).toFixed(1)} {unit}
+                      </small>
+                    )}
+                    {mode === "personal" &&
+                      session.date <= today &&
+                      !sessionHasRun &&
+                      session.plannedKind !== "Race" &&
+                      (session.plannedKm || 0) > 0 && (
+                        <button
+                          className="btn"
+                          onClick={() =>
+                            setTracking((previous) => ({
+                              ...previous,
+                              missedDates: previous.missedDates.includes(
+                                session.date,
+                              )
+                                ? previous.missedDates.filter(
+                                    (d) => d !== session.date,
+                                  )
+                                : [...previous.missedDates, session.date],
+                            }))
+                          }
+                        >
+                          {tracking.missedDates.includes(session.date)
+                            ? "Undo missed mark"
+                            : "Mark this run missed"}
+                        </button>
+                      )}
+                  </div>
                 </div>
               </section>
               <section className="panel plan-blocks">
@@ -1180,9 +1290,9 @@ function App() {
               </section>
               <p className="fineprint">
                 This is an adjustable training template, not a validated
-                coaching model. Recovery flags adjust today’s suggestion only;
-                calendar exports contain the base schedule. Goal pace is a
-                target, not an assessment of fitness.
+                coaching model. Recovery and confirmed missed runs adjust the
+                schedule and exported calendar. Cuts and rebuild rates are app
+                heuristics. Goal pace is a target, not an assessment of fitness.
               </p>
             </>
           )}
@@ -1242,7 +1352,7 @@ function App() {
                   <p>
                     {signals.reasons.join(". ")}
                     {signals.factor < 1
-                      ? " Today’s suggestion is 20% shorter and easy effort."
+                      ? " Today’s readings can lighten uncompleted sessions. See the training plan for the exact adjustment."
                       : ""}
                   </p>
                 </div>
@@ -1404,8 +1514,9 @@ function App() {
                   Milemark flags sleep under 6 hours, sleep scores under 60, or
                   HRV outside your own baseline. Single-night HRV is not used on
                   its own. These are simple app rules, not Garmin’s Training
-                  Readiness score. Missing values stay missing. Data older than
-                  two days doesn’t change your run.
+                  Readiness score. Missing values stay missing. Only readings
+                  dated today trigger a new plan adjustment; older readings
+                  remain visible as history.
                 </p>
                 <p>
                   HRV is personal. Garmin needs around three weeks of overnight
@@ -1728,7 +1839,7 @@ function App() {
                     Use my last 4 complete weeks <Activity size={16} />
                   </button>
                 )}
-                <RacePicker settings={settings} />
+                <RacePicker settings={settings} today={today} />
                 <div className="form-row">
                   <label>
                     Goal hours
@@ -2016,6 +2127,7 @@ function App() {
                         await api("garmin/disconnect");
                         setConnected(false);
                         setPersonal(EMPTY);
+                        setTracking({ missedDates: [] });
                         setMode("personal");
                         setNotice(
                           "Garmin disconnected and local import removed.",
@@ -2137,7 +2249,15 @@ function App() {
                     mode === "demo"
                       ? "milemark-sample.json"
                       : "milemark-journal.json",
-                    JSON.stringify(snapshot, null, 2),
+                    JSON.stringify(
+                      {
+                        ...snapshot,
+                        planTracking:
+                          mode === "personal" ? tracking : undefined,
+                      },
+                      null,
+                      2,
+                    ),
                     "application/json",
                   )
                 }
@@ -2158,6 +2278,7 @@ function App() {
                       return;
                     }
                     setPersonal(EMPTY);
+                    setTracking({ missedDates: [] });
                     setConfirmClear(false);
                     setNotice(
                       "Browser journal cleared. Garmin tokens and the local server cache are unchanged.",
@@ -2202,8 +2323,10 @@ function App() {
               <p>
                 Race estimates use the Riegel formula (exponent 1.06) on an
                 explicitly marked race or your entered race time. They don’t
-                guarantee an outcome. Sleep and HRV flags can reduce today’s
-                suggestion; they are not Garmin’s readiness algorithm.
+                guarantee an outcome. Sleep and HRV flags reduce uncompleted
+                sessions; repeated flags reserve easy days. Confirmed missed
+                runs reduce the build without catch-up mileage. These are app
+                heuristics, not Garmin’s readiness algorithm.
               </p>
               <h3>Private by design</h3>
               <p>
@@ -2247,7 +2370,13 @@ function App() {
     </div>
   );
 }
-function RacePicker({ settings }: { settings: Settings }) {
+function RacePicker({
+  settings,
+  today,
+}: {
+  settings: Settings;
+  today: string;
+}) {
   const events = upcomingRaces(today);
   const [choice, setChoice] = useState(
     events.find(
