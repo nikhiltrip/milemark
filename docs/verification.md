@@ -1,6 +1,26 @@
-# Verification — October 15, 2026
+# Verification
 
-## Confirmed
+## Adaptive-plan release: November 10, 2026
+
+Verified code: [`0b473c6`](https://github.com/nikhiltrip/milemark/commit/0b473c6740292cd78b72208399ee04278cfaf9a3). [GitHub Actions run 42929416317](https://github.com/nikhiltrip/milemark/actions/runs/42929416317) passed.
+
+- 31 TypeScript tests passed, including ten new adaptation tests.
+- 13 Python tests passed; the Garmin adapter and API behavior were unchanged.
+- TypeScript checks and the production build passed.
+- Browser checks: marking a missed run changed the next scheduled run from 3.1 to 2.5 miles; undo restored it. A synthetic five-hour sleep check-in reduced today's scheduled run to 2.5 miles and changed the weekly total.
+- Personal mode and the saved recovery adjustment survived a reload.
+- The training-plan page had no horizontal overflow at 390px width.
+- Regression tests verify adjusted calendar exports, stale/missing data handling, recorded-run precedence, preserved rest/race/taper dates, and a rebuild anchored to the interruption date across later weeks.
+
+I published the updated [owner-private preview](https://milemark-nikhil.ntripathi11.chatgpt.site). It requires ChatGPT sign-in. I verified the interactions locally; I did not complete a new hosted sign-in or a live Garmin sync during this release. Screenshot check-ins were synthetic test values, not the owner's recovery measurements.
+
+These software checks do not establish that the training rules improve performance or prevent injury. The prior live Garmin verification below remains dated October 15.
+
+---
+
+## Earlier verification: October 15, 2026
+
+### Confirmed
 
 - 21 TypeScript tests pass: calendar persistence, training constraints, race dates, taper behavior, trend-based recovery, real-race comparisons, calendar export, and malformed imports.
 - 13 Python tests pass: Garmin normalization, missing metrics, read-only sync calls, login/MFA contracts, request-origin/CSRF protections, redacted errors, and preservation of the last successful import.
@@ -11,7 +31,7 @@
 - Disposable QA run/check-in records were cleared. Screenshots use synthetic demo data or an empty personal journal.
 - Garmin session tokens and SQLite data are ignored by Git.
 
-## Live account check and remaining limits
+### Live account check and remaining limits
 
 - Live Garmin sign-in and read-only import succeeded with the owner’s account. No account data was added to the repository. Recovery values unavailable from the device remain missing.
 - Browser file-import interaction could not be completed by the Chrome automation extension without its file-access permission. Import schema validation is unit tested.
@@ -19,7 +39,7 @@
 
 The app shows these distinctions in its connection screen and Progress & science page.
 
-## Follow-up regressions
+### Follow-up regressions
 
 - Low-base, long-timeline scenarios now reach the 30–40 mile range; the default four-day SF schedule peaks around 35 miles with a 17.5-mile long run. Short timelines cannot force the same target.
 - Sleep stats and HRV range payloads are tested alongside detail fallback, unit-safe activity metrics, VO₂ max selection, timezone validation, and cache-merge behavior.

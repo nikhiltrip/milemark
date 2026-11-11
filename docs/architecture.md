@@ -33,6 +33,16 @@ Current volume is always explicit. Imported activity history can prefill a recen
 
 The browser maintains a labeled sample mode separately from the personal journal. Imports validate dates, finite numbers, array limits, and units. Exports use a small normalized schema that excludes credentials and GPS points.
 
+## Adaptive planning and state
+
+`engine.ts` generates the base calendar. `adaptation.ts` derives the displayed schedule from that template, imported runs, dated recovery readings, and `PlanTracking` decisions. It recalculates rather than applying a second reduction to an already adjusted plan.
+
+A complete Garmin activity import establishes missing-run coverage through the day before the import. Partial or activity-limited imports do not establish absence. Manual users can confirm journal coverage or mark individual sessions missed. Recorded runs override missed marks. The engine skips today-only recovery changes for sessions already recorded and preserves race distance and rest days.
+
+An interrupted week anchors the rebuild factor to its own calendar date, so reopening the app does not restart the reduction. The UI uses the adjusted sessions for its cards, totals, and `.ics` export. Exporting creates a file; it does not synchronize changes to an external calendar.
+
+Browser local storage holds personal/demo mode, goal settings, the journal, and manual tracking decisions. JSON journal exports include `planTracking`; they do not include goal settings or Garmin credentials. Saving a new goal clears manual tracking decisions. The date refreshes on window focus and every minute while the app is open. This does not schedule Garmin network requests.
+
 ## Known limits
 
 - Unofficial Garmin services can change, require MFA, rate-limit, or reject a login. This project does not claim approved Garmin partner status.
