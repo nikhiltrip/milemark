@@ -62,6 +62,14 @@ export interface Session {
   kind: "Rest" | "Easy" | "Steady" | "Long run" | "Race";
   km: number;
   note: string;
+  plannedKm?: number;
+  plannedKind?: Session["kind"];
+  adjustments?: string[];
+  status?: "completed" | "missed" | "unconfirmed";
+}
+export interface PlanTracking {
+  missedDates: string[];
+  confirmedThrough?: string;
 }
 export interface Week {
   start: string;
